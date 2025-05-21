@@ -85,9 +85,13 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
             start = content.index("{")
             end = content.rindex("}") + 1
             parsed = eval(content[start:end])
-            return parsed if isinstance(parsed, dict) else {}
-        else:
-            return {}
+        if isinstance(parsed, dict):
+            # Fill missing keys with None to ensure all preferences are present
+            for key in ["genre", "mood", "tempo", "artist_or_song"]:
+                if key not in parsed:
+                    parsed[key] = None
+            return parsed
+        return {}
     except Exception as e:
         print("Extraction error:", e)
 
