@@ -24,7 +24,8 @@ def fuzzy_match_artist_song(df, query: str):
     elif song_matches:
         return df[df['track_name'].str.lower().isin(song_matches)]
     else:
-        return df  # fallback if no close match
+        # Enhanced fallback: Return top 5 songs by popularity as a default
+        return df.nlargest(5, 'popularity') if 'popularity' in df.columns else df.head(5)
 
 # 🎤 Chat-like response using GPT
 def generate_chat_response(song_dict: dict, preferences: dict, api_key: str) -> str:
@@ -50,7 +51,13 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str) -> 
         )
         return response['choices'][0]['message']['content'].strip()
     except Exception:
-        return f"Here's a great song: '{song_dict['song']}' by {song_dict['artist']}."
+        # Enhanced fallback response
+        fallback_message = (
+            f"I couldn't generate a detailed response right now, but here's a great song: "
+            f"'{song_dict['song']}' by {song_dict['artist']} ({song_dict['genre']}, {song_dict['tempo']} tempo). "
+            "It's a fantastic choice based on your preferences!"
+        )
+        return fallback_message
 
 # 🧠 GPT-based preference extractor
 def extract_preferences_from_message(message: str, api_key: str) -> dict:
@@ -83,4 +90,17 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
             return {}
     except Exception as e:
         print("Extraction error:", e)
-        return {}
+
+        # Fallback: Basic keyword-based extraction
+        keywords = {
+            "genre": ["pop", "rock", "jazz", "classical", "hip-hop", "edm", "indie"],
+            "mood": ["happy", "sad", "energetic", "calm", "romantic", "angry"],
+            "tempo": ["slow", "medium", "fast"],
+        }
+        extracted = {key: None for key in ["genre", "mood", "tempo", "artist_or_song"]}
+        for key, values in keywords.items():
+            for value in values:
+                if value in message.lower():
+                    extracted[key] = value
+                    break
+        return extracted
