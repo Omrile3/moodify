@@ -23,7 +23,7 @@ def fuzzy_match_artist_song(df, query: str):
     else:
         return df.nlargest(5, 'popularity') if 'popularity' in df.columns else df.head(5)
 
-# 🧠 GPT-powered response generation
+# ✅ GPT response generator (OpenAI v1.x)
 def generate_chat_response(song_dict: dict, preferences: dict, api_key: str) -> str:
     openai.api_key = api_key
 
@@ -36,7 +36,7 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str) -> 
     """
 
     try:
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You're Moodify, a chill and friendly music recommendation assistant."},
@@ -44,14 +44,14 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str) -> 
             ],
             temperature=0.7
         )
-        return response['choices'][0]['message']['content'].strip()
+        return response.choices[0].message.content.strip()
     except Exception:
         return (
             f"Here's a great track: '{song_dict['song']}' by {song_dict['artist']} — "
             f"a perfect fit for your vibe!"
         )
 
-# 📦 Extract music preferences using GPT (super NLP)
+# ✅ GPT extractor (OpenAI v1.x)
 def extract_preferences_from_message(message: str, api_key: str) -> dict:
     openai.api_key = api_key
 
@@ -63,7 +63,7 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
     """
 
     try:
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "Extract music preferences from casual human messages."},
@@ -72,7 +72,7 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
             temperature=0.3
         )
 
-        content = response['choices'][0]['message']['content']
+        content = response.choices[0].message.content
         if "{" in content:
             start = content.index("{")
             end = content.rindex("}") + 1
