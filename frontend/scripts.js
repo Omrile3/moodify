@@ -1,4 +1,4 @@
-const backendUrl = "https://your-backend-url.onrender.com"; // Update with your actual Render backend URL
+const backendUrl = "https://moodify-backend-uj8d.onrender.com"; 
 const sessionId = generateSessionId();
 
 function generateSessionId() {
