@@ -49,14 +49,14 @@ def recommend(preference: PreferenceInput):
     user_message = preference.artist_or_song or ""
 
     # 👋 Handle greetings and general conversation
-    if user_message.strip() == "" or any(word in user_message.lower() for word in [
-        "hello", "hi", "start", "hey", "who are you", "what can you do","hello!","hey!","hi!","hi there!","hello there!","hey there!","what's up?","how are you?","how's it going?","howdy!","greetings!","salutations!","yo!","sup?","what's new?","what's happening?","what's good?","what's cooking?","what's cracking?","what's popping?","what's the word?","what's the deal?","what's the scoop?"
-    ]):
+    if user_message.strip().lower() in [
+        "hello", "hi", "start", "hey", "who are you", "what can you do", "hello!", "hey!", "hi!", "hi there!", "hello there!", "hey there!", "what's up?", "how are you?", "how's it going?", "howdy!", "greetings!", "salutations!", "yo!", "sup?", "what's new?", "what's happening?", "what's good?", "what's cooking?", "what's cracking?", "what's popping?", "what's the word?", "what's the deal?", "what's the scoop?"
+    ]:
         return {
             "message": (
                 "Hey! I'm Moodify — your GPT-powered music buddy 🎧. "
                 "Tell me how you feel, what you're into, or name a favorite artist or vibe. "
-                "For example: 'Give me a chill acoustic track like Ed Sheeran'."
+                "For example: 'Give me a chill acoustic track, I like Ed Sheeran Ed Sheeran'."
             ),
             "options": ["I'm sad", "Play pop", "Show me EDM", "Feeling energetic"]
         }
@@ -73,19 +73,10 @@ def recommend(preference: PreferenceInput):
             "options": ["Talk about music", "Recommend a song", "Tell me a joke"]
         }
 
-    # � Extract intent using GPT
+    # 🧠 Extract intent using GPT
     extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
 
-    if not extracted:
-        return {
-            "message": (
-                "Hmm, I couldn't understand that. Try telling me a mood, genre, artist, or vibe! "
-                "For example: 'I need something calm and romantic'."
-            ),
-            "options": ["Chill pop", "Fast EDM", "Sad indie", "Latin mood", "Top 5 popular songs"]
-        }
-
-    # �🧪 Check for missing preferences and prompt user
+    # 🧪 Handle partial or missing preferences
     missing_keys = [key for key in ["genre", "mood", "tempo", "artist_or_song"] if not extracted.get(key)]
     if missing_keys:
         prompts = {
