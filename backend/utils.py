@@ -1,21 +1,20 @@
 import difflib
-import openai
+import requests
+import json
 
-# 🎚️ Convert user tempo to BPM range
+CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
+
 def convert_tempo_to_bpm(tempo_category: str) -> tuple:
-    tempo_category = tempo_category.lower()
     return {
         'slow': (0, 89),
         'medium': (90, 120),
         'fast': (121, 300)
-    }.get(tempo_category, (0, 300))
+    }.get(tempo_category.lower(), (0, 300))
 
-# 🎯 Match artist or track by fuzzy text
 def fuzzy_match_artist_song(df, query: str):
     query = query.lower()
     artist_matches = difflib.get_close_matches(query, df['track_artist'].str.lower(), n=5, cutoff=0.6)
     song_matches = difflib.get_close_matches(query, df['track_name'].str.lower(), n=5, cutoff=0.6)
-
     if artist_matches:
         return df[df['track_artist'].str.lower().isin(artist_matches)]
     elif song_matches:
@@ -23,65 +22,63 @@ def fuzzy_match_artist_song(df, query: str):
     else:
         return df.nlargest(5, 'popularity') if 'popularity' in df.columns else df.head(5)
 
-# ✅ GPT response generator (OpenAI v1.x)
-def generate_chat_response(song_dict: dict, preferences: dict, api_key: str) -> str:
-    openai.api_key = api_key
+def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, custom_prompt: str = None) -> str:
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
 
-    prompt = f"""
-    The user likes {preferences.get('genre', 'some genre')} music, is feeling {preferences.get('mood', 'some mood')}, and prefers {preferences.get('tempo', 'any')} tempo.
+    prompt = custom_prompt or f"""
+The user likes {preferences.get('genre', 'some genre')} music, is feeling {preferences.get('mood', 'some mood')}, and prefers {preferences.get('tempo', 'any')} tempo.
 
-    Suggest a song in a fun, helpful tone. Explain in one line why this song fits.
+Suggest a song and explain why it fits:
+"{song_dict['song']}" by {song_dict['artist']} ({song_dict['genre']}, {song_dict['tempo']} tempo)
+"""
 
-    Song: "{song_dict['song']}" by {song_dict['artist']} ({song_dict['genre']}, {song_dict['tempo']} tempo)
-    """
+    body = {
+        "model": "claude-3-haiku-20240307",
+        "max_tokens": 256,
+        "temperature": 0.7,
+        "messages": [{"role": "user", "content": prompt}]
+    }
 
+    response = requests.post(CLAUDE_API_URL, headers=headers, json=body)
     try:
-        response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You're Moodify, a chill and friendly music recommendation assistant."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7
-        )
-        return response.choices[0].message.content.strip()
-    except Exception:
-        return (
-            f"Here's a great track: '{song_dict['song']}' by {song_dict['artist']} — "
-            f"a perfect fit for your vibe!"
-        )
+        return response.json()['content'][0]['text'].strip()
+    except Exception as e:
+        print("Claude Error:", e)
+        return f"Here's a great track: '{song_dict['song']}' by {song_dict['artist']}."
 
-# ✅ GPT extractor (OpenAI v1.x)
 def extract_preferences_from_message(message: str, api_key: str) -> dict:
-    openai.api_key = api_key
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
 
     prompt = f"""
-    From this message, extract music preferences in lowercase JSON format with keys: genre, mood, tempo, artist_or_song.
-    Use null for anything not mentioned.
+Extract music preferences from this message in JSON format: genre, mood, tempo, artist_or_song.
+Use lowercase. Use null if not mentioned.
 
-    Message: "{message}"
-    """
+User input: "{message}"
+"""
+
+    body = {
+        "model": "claude-3-haiku-20240307",
+        "max_tokens": 256,
+        "temperature": 0.3,
+        "messages": [{"role": "user", "content": prompt}]
+    }
 
     try:
-        response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Extract music preferences from casual human messages."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3
-        )
-
-        content = response.choices[0].message.content
-        if "{" in content:
-            start = content.index("{")
-            end = content.rindex("}") + 1
-            parsed = eval(content[start:end])
-            for key in ["genre", "mood", "tempo", "artist_or_song"]:
-                if key not in parsed:
-                    parsed[key] = None
-            return parsed
-        return {}
+        response = requests.post(CLAUDE_API_URL, headers=headers, json=body)
+        content = response.json()['content'][0]['text']
+        parsed = json.loads(content)
+        for key in ["genre", "mood", "tempo", "artist_or_song"]:
+            if key not in parsed:
+                parsed[key] = None
+        return parsed
     except Exception as e:
         print("Extraction error:", e)
         return {
