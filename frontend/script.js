@@ -1,4 +1,4 @@
-const backendUrl = "https://moodify-backend-uj8d.onrender.com"; 
+const backendUrl = "https://moodify-backend-uj8d.onrender.com";
 const sessionId = generateSessionId();
 
 function generateSessionId() {
@@ -13,7 +13,6 @@ function sendMessage() {
   appendUserMessage(message);
   inputField.value = "";
 
-  // Decide if this is a preference input or command
   if (message.toLowerCase().includes("another") || message.toLowerCase().includes("change")) {
     handleCommand(message);
   } else {
@@ -22,25 +21,38 @@ function sendMessage() {
 }
 
 function handlePreferences(message) {
-  // Basic NLP parsing (improve as needed)
+  // Extract preferences using regex
+  const genreMatch = message.match(/pop|rock|hip[- ]?hop|edm|latin/i);
+  const moodMatch = message.match(/happy|calm|energetic|sad/i);
+  const tempoMatch = message.match(/slow|medium|fast/i);
+  const artistMatch = message.includes("by") ? message.split("by").pop().trim() : null;
+
   const preferences = {
     session_id: sessionId,
-    genre: message.match(/pop|rock|hip[- ]?hop|edm|latin/i)?.[0],
-    mood: message.match(/happy|calm|energetic|sad/i)?.[0],
-    tempo: message.match(/slow|medium|fast/i)?.[0],
-    artist_or_song: message.includes("by") ? message.split("by").pop().trim() : null
+    genre: genreMatch ? genreMatch[0].toLowerCase() : null,
+    mood: moodMatch ? moodMatch[0].toLowerCase() : null,
+    tempo: tempoMatch ? tempoMatch[0].toLowerCase() : null,
+    artist_or_song: artistMatch || null
   };
 
+  // Ensure all keys are present to satisfy FastAPI model
   fetch(`${backendUrl}/recommend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(preferences)
   })
-  .then(res => res.json())
-  .then(data => {
-    appendBotMessage(data.response || data.message);
-    renderOptions(data.options || []);
-  });
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    })
+    .then(data => {
+      appendBotMessage(data.response || data.message);
+      renderOptions(data.options || []);
+    })
+    .catch(err => {
+      appendBotMessage("🚨 Error talking to Moodify. Try again.");
+      console.error("Fetch error:", err);
+    });
 }
 
 function handleCommand(command) {
@@ -49,15 +61,22 @@ function handleCommand(command) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId, command })
   })
-  .then(res => res.json())
-  .then(data => {
-    if (data.response) {
-      appendBotMessage(data.response);
-    } else if (data.message) {
-      appendBotMessage(data.message);
-    }
-    renderOptions(data.options || []);
-  });
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    })
+    .then(data => {
+      if (data.response) {
+        appendBotMessage(data.response);
+      } else if (data.message) {
+        appendBotMessage(data.message);
+      }
+      renderOptions(data.options || []);
+    })
+    .catch(err => {
+      appendBotMessage("🚨 Command failed. Please try again.");
+      console.error("Command error:", err);
+    });
 }
 
 function appendUserMessage(msg) {
