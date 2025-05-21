@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import uvicorn
 import os
 from dotenv import load_dotenv
+from typing import Optional
 
 from recommender import recommend_song
 from memory import SessionMemory
