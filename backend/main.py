@@ -10,14 +10,14 @@ from recommender import recommend_song
 from memory import SessionMemory
 from utils import generate_chat_response, extract_preferences_from_message
 
-# Load .env and OpenAI key
+# Load OpenAI API key
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
 memory = SessionMemory()
 
-# CORS
+# CORS setup
 origins = [
     "https://moodify-frontend-cheh.onrender.com",
     "http://localhost:3000",
@@ -48,76 +48,73 @@ class CommandInput(BaseModel):
 def recommend(preference: PreferenceInput):
     user_message = preference.artist_or_song or ""
 
-    # 👋 Handle greetings and general conversation
-    if user_message.strip().lower() in [
-        "hello", "hi", "start", "hey", "who are you", "what can you do", "hello!", "hey!", "hi!", "hi there!", "hello there!", "hey there!", "what's up?", "how are you?", "how's it going?", "howdy!", "greetings!", "salutations!", "yo!", "sup?", "what's new?", "what's happening?", "what's good?", "what's cooking?", "what's cracking?", "what's popping?", "what's the word?", "what's the deal?", "what's the scoop?"
-    ]:
+    # 🟢 Handle greeting & intro
+    greetings = [
+        "hello", "hi", "start", "hey", "who are you", "what can you do",
+        "hello!", "hi!", "hi there!", "yo!", "sup?", "what’s up"
+    ]
+    if user_message.strip().lower() in greetings:
         return {
             "message": (
-                "Hey! I'm Moodify — your GPT-powered music buddy 🎧. "
-                "Tell me how you feel, what you're into, or name a favorite artist or vibe. "
-                "For example: 'Give me a chill acoustic track, I like Ed Sheeran Ed Sheeran'."
+                "🟢 <span style='color:green'>Hey! I'm <strong>Moodify</strong> — your GPT-powered music buddy 🎧.</span><br>"
+                "Tell me how you feel, your favorite vibe, or an artist — and I’ll find the perfect song."
             ),
-            "options": ["I'm sad", "Play pop", "Show me EDM", "Feeling energetic"]
+            "options": ["I'm sad", "Play pop", "Feeling energetic", "Show me EDM"]
         }
 
-    # 🗣️ Handle general conversational input
-    if not any(keyword in user_message.lower() for keyword in ["music", "song", "artist", "genre", "mood", "tempo"]):
-        gpt_response = generate_chat_response(
-            {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
-            {"genre": None, "mood": None, "tempo": None},
-            OPENAI_API_KEY
-        )
-        return {
-            "message": gpt_response,
-            "options": ["Talk about music", "Recommend a song", "Tell me a joke"]
-        }
-
-    # 🧠 Extract intent using GPT
+    # 🧠 Extract user preferences with GPT
     extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
 
-    # 🧪 Handle partial or missing preferences
-    missing_keys = [key for key in ["genre", "mood", "tempo", "artist_or_song"] if not extracted.get(key)]
-    if missing_keys:
-        prompts = {
-            "genre": "What genre of music do you like? (e.g., pop, rock, jazz)",
-            "mood": "What mood are you in? (e.g., happy, sad, energetic)",
-            "tempo": "What tempo do you prefer? (e.g., slow, medium, fast)",
-            "artist_or_song": "Do you have a favorite artist or song in mind?"
-        }
-        follow_up_questions = [prompts[key] for key in missing_keys]
+    # ❓ If nothing usable, guide user
+    if not extracted or not any(extracted.values()):
         return {
-            "message": "I need a bit more information to find the perfect song for you.",
-            "follow_up_questions": follow_up_questions
+            "message": (
+                "🟢 <span style='color:green'>Hmm... I couldn't extract enough to recommend a song.</span><br>"
+                "Tell me a genre, a mood, or an artist — like 'play something chill by Coldplay'."
+            ),
+            "options": ["Happy mood", "Rock artist", "Fast track", "Something emotional"]
+        }
+
+    # 🔎 If partial info → follow-up questions
+    missing_keys = [k for k in ["genre", "mood", "tempo", "artist_or_song"] if not extracted.get(k)]
+    if missing_keys:
+        questions = {
+            "genre": "What genre do you like? (pop, rock, jazz...)",
+            "mood": "How are you feeling? (happy, sad, energetic...)",
+            "tempo": "What tempo do you prefer? (slow, medium, fast)",
+            "artist_or_song": "Any favorite artist or song in mind?"
+        }
+        return {
+            "message": "🟢 <span style='color:green'>Got it! But I need a bit more info:</span>",
+            "follow_up_questions": [questions[k] for k in missing_keys]
         }
 
     # 💾 Update session memory
     session = memory.get_session(preference.session_id)
-    for key in ['genre', 'mood', 'tempo', 'artist_or_song']:
-        value = extracted.get(key)
-        if value:
-            memory.update_session(preference.session_id, key, value)
+    for key in ["genre", "mood", "tempo", "artist_or_song"]:
+        val = extracted.get(key)
+        if val:
+            memory.update_session(preference.session_id, key, val)
 
-    current_prefs = memory.get_session(preference.session_id)
+    prefs = memory.get_session(preference.session_id)
 
-    # 🎵 Get song recommendation
-    song = recommend_song(current_prefs)
-
+    # 🎧 Get recommendation
+    song = recommend_song(prefs)
     if not song:
         return {
             "message": (
-                "Couldn't find anything matching that. Try another artist or vibe!"
+                "🟢 <span style='color:green'>Sorry, couldn't find a good match. Want to try something else?</span>"
             ),
-            "options": ["Try pop", "Pick a mood", "Another suggestion"]
+            "options": ["Try another genre", "Suggest again", "Change artist"]
         }
 
-    # 🗣️ GPT-style friendly reply
-    gpt_message = generate_chat_response(song, current_prefs, OPENAI_API_KEY)
+    # 🗣️ GPT chat-style reply
+    gpt_message = generate_chat_response(song, prefs, OPENAI_API_KEY)
 
     return {
         "song": song,
-        "response": gpt_message,
-        "options": ["Another one", "Change genre", "Feeling different"]
+        "response": f"🟢 <span style='color:green'>{gpt_message}</span>",
+        "options": ["Another one", "Change mood", "Feeling different"]
     }
 
 @app.post("/command")
@@ -129,20 +126,15 @@ def handle_command(command_input: CommandInput):
         prefs = memory.get_session(session_id)
         song = recommend_song(prefs)
         gpt_message = generate_chat_response(song, prefs, OPENAI_API_KEY)
-        return {"song": song, "response": gpt_message}
+        return {"song": song, "response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
 
     elif "change" in cmd:
-        if "genre" in cmd:
-            memory.update_session(session_id, "genre", None)
-            return {"message": "Which genre would you like now?"}
-        elif "mood" in cmd:
-            memory.update_session(session_id, "mood", None)
-            return {"message": "What mood are you in?"}
-        elif "tempo" in cmd:
-            memory.update_session(session_id, "tempo", None)
-            return {"message": "What tempo do you prefer? (slow, medium, fast)"}
+        for k in ["genre", "mood", "tempo"]:
+            if k in cmd:
+                memory.update_session(session_id, k, None)
+                return {"message": f"🟢 <span style='color:green'>What {k} would you like now?</span>"}
 
-    return {"message": "I didn’t understand that. Try 'Change genre' or 'Another one'."}
+    return {"message": "🟢 <span style='color:green'>I didn’t get that. Try saying 'another one' or 'change mood'.</span>"}
 
 @app.get("/session/{session_id}")
 def get_session(session_id: str):

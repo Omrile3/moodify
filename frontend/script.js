@@ -87,7 +87,7 @@ function appendUserMessage(msg) {
 
 function appendBotMessage(msg) {
   const chatBox = document.getElementById("chat-box");
-  chatBox.innerHTML += `<p><strong>Moodify:</strong> ${msg}</p>`;
+  chatBox.innerHTML += `<p class="green-response"><strong>Moodify:</strong> ${msg}</p>`;
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
