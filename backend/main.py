@@ -10,7 +10,7 @@ from recommender import recommend_song
 from memory import SessionMemory
 from utils import generate_chat_response, extract_preferences_from_message
 
-# Load Claude API key
+# Load Claude key
 load_dotenv()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
@@ -44,19 +44,27 @@ class CommandInput(BaseModel):
 def recommend(preference: PreferenceInput):
     user_message = preference.artist_or_song or ""
 
-    if user_message.strip().lower() in ["hello", "hi", "hey", "yo", "start", "what can you do", "who are you"]:
+    greetings = [
+        "hello", "hi", "start", "hey", "who are you", "what can you do", "hi!", "yo", "hello there"
+    ]
+    if user_message.strip().lower() in greetings:
         return {
-            "response": "🟢 <span style='color:green'>Hey! I'm <strong>Moodify</strong> 🎧 — your music assistant powered by Claude 3. Tell me how you feel, a favorite artist, or a vibe, and I’ll find a song for you.</span>"
+            "response": (
+                "🟢 <span style='color:green'>Hey! I'm <strong>Moodify</strong> 🎧 — your Claude-powered music buddy. "
+                "Tell me how you feel, your favorite artist, or the kind of music you want.</span>"
+            )
         }
 
+    # Extract intent from free-text
     extracted = extract_preferences_from_message(user_message, ANTHROPIC_API_KEY)
 
+    # If Claude couldn’t extract anything, ask the user nicely
     if not extracted or not any(extracted.values()):
         clarification_prompt = f"""
-        The user said: "{user_message}"
-        They are asking for a song, but they didn’t provide genre, mood, tempo, or artist.
-        Respond in a helpful, friendly tone asking for more information — such as how they feel, genre they like, or a favorite artist.
-        """
+The user said: "{user_message}"
+They want music, but didn’t provide a genre, mood, tempo, or artist.
+Ask them — nicely and in a casual way — what kind of music or vibe they’re into.
+"""
         gpt_message = generate_chat_response(
             {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
             {"genre": None, "mood": None, "tempo": None},
@@ -65,22 +73,27 @@ def recommend(preference: PreferenceInput):
         )
         return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
 
+    # Update memory
     session = memory.get_session(preference.session_id)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        value = extracted.get(key)
-        if value:
-            memory.update_session(preference.session_id, key, value)
+        val = extracted.get(key)
+        if val:
+            memory.update_session(preference.session_id, key, val)
 
     prefs = memory.get_session(preference.session_id)
     song = recommend_song(prefs)
 
-    if not song:
+    # No result
+    if not song or song['song'] == "N/A":
         return {
-            "response": "🟢 <span style='color:green'>Hmm... I couldn’t find a great match. Maybe try a different artist or mood?</span>"
+            "response": "🟢 <span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
         }
 
     gpt_message = generate_chat_response(song, prefs, ANTHROPIC_API_KEY)
-    return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
+
+    return {
+        "response": f"🟢 <span style='color:green'>{gpt_message}</span>"
+    }
 
 @app.post("/command")
 def handle_command(command_input: CommandInput):
@@ -99,7 +112,7 @@ def handle_command(command_input: CommandInput):
                 memory.update_session(session_id, key, None)
                 return {"response": f"🟢 <span style='color:green'>What {key} would you like now?</span>"}
 
-    return {"response": "🟢 <span style='color:green'>I didn’t get that. Try 'another one' or 'change genre'.</span>"}
+    return {"response": "🟢 <span style='color:green'>Try something like 'another one' or 'change vibe'.</span>"}
 
 @app.get("/session/{session_id}")
 def get_session(session_id: str):
