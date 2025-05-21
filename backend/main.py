@@ -34,10 +34,10 @@ app.add_middleware(
 # Request models
 class PreferenceInput(BaseModel):
     session_id: str
-    genre: str = None
-    mood: str = None
-    tempo: str = None
-    artist_or_song: str = None
+    genre: Optional[str] = None
+    mood: Optional[str] = None
+    tempo: Optional[str] = None
+    artist_or_song: Optional[str] = None
 
 class CommandInput(BaseModel):
     session_id: str
@@ -47,7 +47,7 @@ class CommandInput(BaseModel):
 def recommend(preference: PreferenceInput):
     user_message = preference.artist_or_song or ""
 
-    # 👋 Greetings & empty input
+    # 👋 Handle greetings and general conversation
     if user_message.strip() == "" or any(word in user_message.lower() for word in [
         "hello", "hi", "start", "hey", "who are you", "what can you do","hello!","hey!","hi!","hi there!","hello there!","hey there!","what's up?","how are you?","how's it going?","howdy!","greetings!","salutations!","yo!","sup?","what's new?","what's happening?","what's good?","what's cooking?","what's cracking?","what's popping?","what's the word?","what's the deal?","what's the scoop?"
     ]):
@@ -60,7 +60,19 @@ def recommend(preference: PreferenceInput):
             "options": ["I'm sad", "Play pop", "Show me EDM", "Feeling energetic"]
         }
 
-    # 🧠 Extract intent using GPT
+    # 🗣️ Handle general conversational input
+    if not any(keyword in user_message.lower() for keyword in ["music", "song", "artist", "genre", "mood", "tempo"]):
+        gpt_response = generate_chat_response(
+            {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
+            {"genre": None, "mood": None, "tempo": None},
+            OPENAI_API_KEY
+        )
+        return {
+            "message": gpt_response,
+            "options": ["Talk about music", "Recommend a song", "Tell me a joke"]
+        }
+
+    # � Extract intent using GPT
     extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
 
     if not extracted:
@@ -72,14 +84,19 @@ def recommend(preference: PreferenceInput):
             "options": ["Chill pop", "Fast EDM", "Sad indie", "Latin mood", "Top 5 popular songs"]
         }
 
-    # 🧪 Check if at least one key exists
-    if not any(extracted.get(k) for k in ["genre", "mood", "tempo", "artist_or_song"]):
+    # �🧪 Check for missing preferences and prompt user
+    missing_keys = [key for key in ["genre", "mood", "tempo", "artist_or_song"] if not extracted.get(key)]
+    if missing_keys:
+        prompts = {
+            "genre": "What genre of music do you like? (e.g., pop, rock, jazz)",
+            "mood": "What mood are you in? (e.g., happy, sad, energetic)",
+            "tempo": "What tempo do you prefer? (e.g., slow, medium, fast)",
+            "artist_or_song": "Do you have a favorite artist or song in mind?"
+        }
+        follow_up_questions = [prompts[key] for key in missing_keys]
         return {
-            "message": (
-                "I couldn’t pick out any music preferences from that. "
-                "Tell me a genre (like rock), a mood (like sad), tempo, or an artist!"
-            ),
-            "options": ["Upbeat pop", "Moody rock", "Slow acoustic", "Something by Rihanna", "Popular tracks"]
+            "message": "I need a bit more information to find the perfect song for you.",
+            "follow_up_questions": follow_up_questions
         }
 
     # 💾 Update session memory
