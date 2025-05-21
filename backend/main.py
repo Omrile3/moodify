@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from recommender import recommend_song
 from memory import SessionMemory
-from utils import generate_chat_response
+from utils import generate_chat_response, extract_preferences_from_message
 
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -16,20 +16,20 @@ app = FastAPI()
 memory = SessionMemory()
 
 origins = [
-    "https://moodify-frontend-cheh.onrender.com",  # your deployed frontend
-    "http://localhost:3000",                       # optional: for local dev
+    "https://moodify-frontend-cheh.onrender.com",  # deployed frontend
+    "http://localhost:3000",
     "http://localhost:8000"
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,       
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 🧾 Data models
+# Data Models
 class PreferenceInput(BaseModel):
     session_id: str
     genre: str = None
@@ -43,11 +43,28 @@ class CommandInput(BaseModel):
 
 @app.post("/recommend")
 def recommend(preference: PreferenceInput):
-    session = memory.get_session(preference.session_id)
+    user_message = preference.artist_or_song or ""
 
-    # Update session preferences
+    # Intro / greeting handler
+    if any(word in user_message.lower() for word in ["hello", "hi", "start", "hey", "who are you", "what can you do"]):
+        return {
+            "message": (
+                "👋 Hey! I’m Moodify, your GPT-powered music buddy 🎧. "
+                "Tell me how you’re feeling or what you want to hear — and I’ll find the perfect song."
+            ),
+            "options": ["I'm sad", "Play some pop", "Feeling energetic", "Show me EDM"]
+        }
+
+    # Extract structured preferences using GPT
+    extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
+
+    if not extracted:
+        return {"message": "🤖 I couldn’t understand your request. Try something like 'I want a chill pop track by The Weeknd'."}
+
+    # Update session memory
+    session = memory.get_session(preference.session_id)
     for key in ['genre', 'mood', 'tempo', 'artist_or_song']:
-        value = getattr(preference, key)
+        value = extracted.get(key)
         if value:
             memory.update_session(preference.session_id, key, value)
 
@@ -55,14 +72,14 @@ def recommend(preference: PreferenceInput):
     song = recommend_song(current_prefs)
 
     if not song:
-        return {"message": "Sorry, couldn't find a match for your preferences."}
+        return {"message": "😞 No good match found. Try changing the genre or mood."}
 
     gpt_message = generate_chat_response(song, current_prefs, OPENAI_API_KEY)
 
     return {
         "song": song,
         "response": gpt_message,
-        "options": ["Want another recommendation?", "Change genre?", "Change mood?"]
+        "options": ["Another one", "Change vibe", "Try something different"]
     }
 
 @app.post("/command")
