@@ -31,9 +31,8 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
 
     prompt = custom_prompt or f"""
 The user likes {preferences.get('genre', 'some genre')} music, is feeling {preferences.get('mood', 'some mood')}, and prefers {preferences.get('tempo', 'any')} tempo.
-
-Suggest a song and explain why it fits:
-"{song_dict['song']}" by {song_dict['artist']} ({song_dict['genre']}, {song_dict['tempo']} tempo)
+Suggest a great song: "{song_dict['song']}" by {song_dict['artist']} ({song_dict['genre']}, {song_dict['tempo']} tempo)
+Explain why it fits their vibe in 1 sentence.
 """
 
     body = {
@@ -43,9 +42,14 @@ Suggest a song and explain why it fits:
         "messages": [{"role": "user", "content": prompt}]
     }
 
-    response = requests.post(CLAUDE_API_URL, headers=headers, json=body)
     try:
-        return response.json()['content'][0]['text'].strip()
+        response = requests.post(CLAUDE_API_URL, headers=headers, json=body)
+        data = response.json()
+        if "content" in data and isinstance(data["content"], list):
+            return data["content"][0].get("text", "").strip()
+        else:
+            print("Claude format error:", data)
+            return "I had trouble generating a suggestion."
     except Exception as e:
         print("Claude Error:", e)
         return f"Here's a great track: '{song_dict['song']}' by {song_dict['artist']}."
@@ -58,8 +62,8 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
     }
 
     prompt = f"""
-Extract music preferences from this message in JSON format: genre, mood, tempo, artist_or_song.
-Use lowercase. Use null if not mentioned.
+Extract music preferences from this message in valid JSON format.
+Keys: genre, mood, tempo, artist_or_song. All lowercase. Use null if not present.
 
 User input: "{message}"
 """
@@ -73,12 +77,31 @@ User input: "{message}"
 
     try:
         response = requests.post(CLAUDE_API_URL, headers=headers, json=body)
-        content = response.json()['content'][0]['text']
-        parsed = json.loads(content)
+        data = response.json()
+
+        if "content" in data and isinstance(data["content"], list):
+            text = data["content"][0].get("text", "").strip()
+        else:
+            print("Claude extraction format error:", data)
+            return {
+                "genre": None, "mood": None, "tempo": None, "artist_or_song": None
+            }
+
+        # Parse text block safely into JSON
+        if "{" in text and "}" in text:
+            parsed = json.loads(text[text.index("{"):text.rindex("}")+1])
+        else:
+            return {
+                "genre": None, "mood": None, "tempo": None, "artist_or_song": None
+            }
+
+        # Ensure keys
         for key in ["genre", "mood", "tempo", "artist_or_song"]:
             if key not in parsed:
                 parsed[key] = None
+
         return parsed
+
     except Exception as e:
         print("Extraction error:", e)
         return {
