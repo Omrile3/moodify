@@ -1,6 +1,8 @@
 import difflib
 import requests
 import json
+import re
+import pandas as pd
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -28,26 +30,11 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
         "Content-Type": "application/json"
     }
 
-    prompt = f"""
-You are an AI that extracts music preferences from user input.
-Respond only in valid JSON with 4 keys: genre, mood, tempo, artist_or_song.
-If a value is not explicitly or implicitly stated, use null.
-
-Understand tone and emotion to classify mood:
-- "I feel like crying", "it's been a tough day" → "sad"
-- "let’s party", "hyped up", "workout music" → "energetic"
-- "need to relax", "chill", "lofi", "study" → "calm"
-- "sunny day", "good mood", "sing along" → "happy"
-
-Also extract genre (pop, rock, classical, etc.), tempo (slow, medium, fast), or artist/song names.
-
-Example:
-Input: "Play something upbeat, I love Dua Lipa."
-Output: {"genre": null, "mood": "happy", "tempo": "fast", "artist_or_song": "Dua Lipa"}
-
-Input: "{message}"
+    prompt = custom_prompt or f"""
+The user likes {preferences.get('genre', 'some genre')} music, is feeling {preferences.get('mood', 'some mood')}, and prefers {preferences.get('tempo', 'any')} tempo.
+Suggest a song that fits: "{song_dict['song']}" by {song_dict['artist']} ({song_dict['genre']}, {song_dict['tempo']} tempo).
+Respond in a casual, friendly tone and say why it's a good fit in 1–2 sentences.
 """
-
 
     body = {
         "model": "mixtral-8x7b-32768",
@@ -116,3 +103,36 @@ Input: "{message}"
             "genre": None, "mood": None, "tempo": None, "artist_or_song": None
         }
 
+def map_free_text_to_mood(text: str) -> str:
+    text = text.lower()
+    if any(word in text for word in ["cry", "sad", "lonely", "depressed", "rainy", "tears"]):
+        return "sad"
+    elif any(word in text for word in ["party", "hyped", "dance", "workout", "pump", "intense"]):
+        return "energetic"
+    elif any(word in text for word in ["chill", "calm", "relax", "study", "lofi", "smooth"]):
+        return "calm"
+    elif any(word in text for word in ["happy", "joy", "sunny", "fun", "good mood"]):
+        return "happy"
+    else:
+        return "calm"
+
+def split_mode_category(mode_category: str) -> tuple:
+    if isinstance(mode_category, str):
+        parts = re.split(r'[\s_]+', mode_category.strip())
+        return (parts[0].lower(), parts[1].lower()) if len(parts) >= 2 else (parts[0].lower(), None)
+    return (None, None)
+
+def build_recommendation_key(genre: str, mood: str, energy: str, tempo: str) -> str:
+    return f"{genre}_{mood.capitalize()} {energy.capitalize()}_{tempo.capitalize()}"
+
+def precompute_recommendation_map(df: pd.DataFrame) -> dict:
+    index_map = {}
+    for _, row in df.iterrows():
+        genre = row.get("playlist_genre", "unknown")
+        tempo = row.get("tempo_category", "medium")
+        mood, energy = split_mode_category(row.get("mode_category", "calm calm"))
+        key = build_recommendation_key(genre, mood, energy, tempo)
+        if key not in index_map:
+            index_map[key] = []
+        index_map[key].append(row)
+    return index_map
