@@ -88,10 +88,10 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
     else:
         gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
         response_html = f"<span style='color:green'>{gpt_message}</span>"
-        if spotify_info.get("spotify_url"):
-            response_html += f"<br><a href='{spotify_info['spotify_url']}' target='_blank'>🎧 Listen on Spotify</a>"
         if spotify_info.get("preview_url"):
             response_html += f"<br><audio controls src='{spotify_info['preview_url']}'></audio>"
+        elif spotify_info.get("spotify_url"):
+            response_html += f"<br><a href='{spotify_info['spotify_url']}' target='_blank'>🎧 Listen on Spotify</a>"
 
     return {"response": response_html}
 

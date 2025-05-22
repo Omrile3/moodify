@@ -37,7 +37,9 @@ MOOD_VECTORS = {
 # Build fallback recommenadation map
 recommendation_map = precompute_recommendation_map(df)
 
-def recommend_engine(preferences: dict):
+def recommend_engine(preferences: dict, session_memory=None):
+    if session_memory is None:
+        session_memory = set()  # Track previously recommended songs
     filtered = df.copy()
 
     print("Initial DataFrame size:", filtered.shape)
@@ -88,6 +90,12 @@ def recommend_engine(preferences: dict):
     print("After mood similarity filtering:", filtered.shape)
 
     if not filtered.empty:
+        # Exclude previously recommended songs
+        filtered = filtered[~filtered['track_name'].isin(session_memory)]
+        if filtered.empty:
+            print("All songs have been recommended. Resetting session memory.")
+            session_memory.clear()
+            filtered = df.copy()
         print("Final filtered DataFrame size:", filtered.shape)
         top = filtered.iloc[0]
     else:

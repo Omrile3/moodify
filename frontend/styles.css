@@ -73,3 +73,7 @@ body {
     cursor: pointer;
   }
   
+  .green-response {
+  color: #26f185;
+  font-weight: bold;
+}
