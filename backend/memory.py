@@ -28,6 +28,6 @@ class SessionMemory:
                 "genre": None,
                 "mood": None,
                 "tempo": None,
-                "artist_or_song": None,
+                "artisst_or_song": None,
                 "history": set()
             }

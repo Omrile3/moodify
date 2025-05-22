@@ -1,7 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import uvicorn
 import os
 from dotenv import load_dotenv
@@ -9,9 +9,13 @@ from typing import Optional
 
 from recommender_eng import recommend_engine
 from memory import SessionMemory
-from utils import generate_chat_response, extract_preferences_from_message, search_spotify_preview
+from utils import (
+    generate_chat_response,
+    extract_preferences_from_message,
+    search_spotify_preview
+)
 
-# Load Groq key
+# Load environment variables
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
@@ -20,7 +24,7 @@ memory = SessionMemory()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://moodify-frontend-cheh.onrender.com"],  # Restrict to frontend origin
+    allow_origins=["https://moodify-frontend-cheh.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,9 +45,7 @@ class CommandInput(BaseModel):
 def recommend(preference: PreferenceInput):
     user_message = preference.artist_or_song or ""
 
-    greetings = [
-        "hello", "hi", "start", "hey", "who are you", "what can you do", "hi!", "yo", "hello there"
-    ]
+    greetings = ["hello", "hi", "start", "hey", "who are you", "what can you do"]
     if user_message.strip().lower() in greetings:
         return {
             "response": (
@@ -52,25 +54,21 @@ def recommend(preference: PreferenceInput):
             )
         }
 
-    # Extract intent from free-text
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
-
-    # If extraction fails or all values are null
+    
     if not extracted or not any(extracted.values()):
         clarification_prompt = f"""
-The user said: "{user_message}"
-They want music, but didn’t provide a genre, mood, tempo, or artist.
-Ask them — nicely and in a casual way — what kind of music or vibe they’re into.
-"""
-        gpt_message = generate_chat_response(
+        The user said: "{user_message}"
+        But didn’t provide enough details. Ask — in a casual way — what genre, artist, or vibe they want.
+        """
+        clarification = generate_chat_response(
             {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
             {"genre": None, "mood": None, "tempo": None},
             GROQ_API_KEY,
             custom_prompt=clarification_prompt
         )
-        return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
+        return {"response": f"🟢 <span style='color:green'>{clarification}</span>"}
 
-    # Update session memory
     session = memory.get_session(preference.session_id)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         val = extracted.get(key)
@@ -78,48 +76,45 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
             memory.update_session(preference.session_id, key, val)
 
     prefs = memory.get_session(preference.session_id)
-
-    # Dynamically update preferences for switching styles or moods
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if preference.dict().get(key):
             prefs[key] = preference.dict()[key]
 
-    song = recommend_engine(prefs, session.get("history"))
+    song = recommend_engine(prefs, prefs.get("history"))
+
+    if not song or song['song'] == "N/A":
+        clarification_prompt = f"""
+        The user previously asked: "{user_message}".
+        We couldn’t find a perfect match yet. Ask them to clarify — maybe suggest giving a favorite genre, artist, or mood.
+        """
+        clarification = generate_chat_response(
+            {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
+            prefs,
+            GROQ_API_KEY,
+            custom_prompt=clarification_prompt
+        )
+        return {"response": f"🟢 <span style='color:green'>{clarification}</span>"}
 
     memory.add_to_history(preference.session_id, song["song"])
+    gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
 
-    spotify_info = search_spotify_preview(song["song"], song["artist"])
-
-    # No match fallback
-    if not song or song['song'] == "N/A":
-        response_html = (
-            "🟢 <span style='color:green'>I couldn’t find a match. "
-            "Can you tell me more about what you're looking for? "
-            "For example, your favorite artist, genre, or the vibe you're into?</span>"
-        )
-        response_html += (
-            "<br>🎤 You can also ask for a specific artist, genre, or even a mood like 'happy' or 'calm'."
-        )
+    response_html = f"🟢 <span style='color:green'>{song.get('note', '')}<br>{gpt_message}</span>"
+    if song.get("preview_url"):
+        response_html += f"<br><audio controls src='{song['preview_url']}'></audio>"
+    elif song.get("spotify_url"):
+        response_html += f"<br><a href='{song['spotify_url']}' target='_blank'>🎧 Listen on Spotify</a>"
     else:
-        gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
-        response_html = f"<span style='color:green'>{gpt_message}</span>"
-        if spotify_info and spotify_info.get("preview_url"):
-            response_html += f"<br><audio controls src='{spotify_info['preview_url']}'></audio>"
-        elif spotify_info and spotify_info.get("spotify_url"):
-            response_html += f"<br><a href='{spotify_info['spotify_url']}' target='_blank'>🎧 Listen on Spotify</a>"
-        else:
-            response_html += "<br>⚠️ No Spotify preview available."
+        response_html += "<br>⚠️ No Spotify preview available."
 
     return {"response": response_html}
-
 
 @app.post("/command")
 def handle_command(command_input: CommandInput):
     cmd = command_input.command.lower()
     session_id = command_input.session_id
+    prefs = memory.get_session(session_id)
 
     if "another" in cmd:
-        prefs = memory.get_session(session_id)
         song = recommend_engine(prefs, prefs.get("history"))
         memory.add_to_history(session_id, song["song"])
         gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
@@ -131,23 +126,22 @@ def handle_command(command_input: CommandInput):
                 memory.update_session(session_id, key, None)
                 return {"response": f"🟢 <span style='color:green'>What {key} would you like now?</span>"}
 
-    return {"response": "🟢 <span style='color:green'>Try something like 'another one' or 'change vibe'.</span>"}
+    return {"response": "🟢 <span style='color:green'>Try saying something like 'another one' or 'change vibe'.</span>"}
 
 @app.get("/session/{session_id}")
 def get_session(session_id: str):
     return memory.get_session(session_id)
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
+async def global_exception_handler(request: Request, exc: Exception):
     import traceback
-    error_details = traceback.format_exc()
-    print(f"Unhandled exception: {exc}\nDetails:\n{error_details}")
+    print("Error:", traceback.format_exc())
     return JSONResponse(
         status_code=500,
-        content={"message": "An unexpected error occurred. Please try again later."},
+        content={"message": "Something went wrong. Please try again."},
     )
 
-@app.get("/test-cors")  # Test endpoint to verify CORS
+@app.get("/test-cors")
 def test_cors():
     return {"message": "CORS is working!"}
 
