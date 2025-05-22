@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 from typing import Optional
 
-from backend.recommender_eng import recommend_engine
+from recommender_eng import recommend_engine
 from memory import SessionMemory
 from utils import generate_chat_response, extract_preferences_from_message
 
