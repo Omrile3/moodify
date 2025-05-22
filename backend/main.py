@@ -20,7 +20,7 @@ memory = SessionMemory()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://moodify-frontend-cheh.onrender.com",
+        "https://moodify-frontend-cheh.onrender.com",  
         "http://localhost:3000",
         "http://localhost:8000"
     ],
