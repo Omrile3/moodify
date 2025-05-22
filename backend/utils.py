@@ -2,7 +2,15 @@ import difflib
 import os
 import base64
 import requests
+import json
+import re
+import pandas as pd
+import numpy as np
 from functools import lru_cache
+from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
+
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 @lru_cache(maxsize=1)
 def get_spotify_access_token():
@@ -32,23 +40,19 @@ def search_spotify_preview(song_name, artist_name):
 
     try:
         res = requests.get(url, headers=headers)
-        items = res.json()["tracks"]["items"]
+        items = res.json().get("tracks", {}).get("items", [])
         if not items:
             return {}
         track = items[0]
         return {
-            "spotify_url": track["external_urls"]["spotify"],
-            "preview_url": track.get("preview_url")
+            "spotify_url": track["external_urls"].get("spotify"),
+            "preview_url": track.get("preview_url"),
+            "album": track.get("album", {}).get("name"),
+            "cover_art": track.get("album", {}).get("images", [{}])[0].get("url")
         }
     except Exception as e:
         print("Spotify search error:", e)
         return {}
-import requests
-import json
-import re
-import pandas as pd
-
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 def convert_tempo_to_bpm(tempo_category: str) -> tuple:
     return {
@@ -59,35 +63,21 @@ def convert_tempo_to_bpm(tempo_category: str) -> tuple:
 
 def fuzzy_match_artist_song(df, query: str):
     if not isinstance(query, str):
-        print(f"Invalid query type: {type(query)}. Expected a string.")
-        return df.head(5)  # Return top 5 rows as a fallback
+        return df.head(5)
 
     query = query.lower()
-    print(f"Performing fuzzy match for query: {query}")
-    # Ensure columns are strings and handle missing values
     df['track_artist'] = df['track_artist'].fillna("").astype(str).str.lower()
     df['track_name'] = df['track_name'].fillna("").astype(str).str.lower()
 
-    # Prioritize exact matches
-    exact_artist_matches = df[df['track_artist'] == query]
-    exact_song_matches = df[df['track_name'] == query]
-
+    exact_artist_matches = df[df['track_artist'].str.contains(query)]
     if not exact_artist_matches.empty:
         return exact_artist_matches
+
+    exact_song_matches = df[df['track_name'].str.contains(query)]
     if not exact_song_matches.empty:
         return exact_song_matches
 
-    # Check for playlist-based similarity
-    playlist_matches = df[df['track_name'] == query]
-    if not playlist_matches.empty:
-        playlist_id = playlist_matches.iloc[0].get("playlist_id")
-        if playlist_id:
-            print(f"Finding songs in the same playlist: {playlist_id}")
-            return df[df["playlist_id"] == playlist_id]
-
-    # Feature-based similarity for songs
     if "valence" in df.columns and "energy" in df.columns and "danceability" in df.columns:
-        print("Performing feature-based similarity matching.")
         target_song = df[df['track_name'] == query]
         if not target_song.empty:
             target_features = target_song[["valence", "energy", "danceability"]].iloc[0].values
@@ -96,8 +86,7 @@ def fuzzy_match_artist_song(df, query: str):
             ).flatten()
             return df.sort_values(by="similarity", ascending=False).head(5)
 
-    # Fallback: Consider user preferences if available
-    return df.nlargest(5, 'popularity') if 'popularity' in df.columns else df.head(5)
+    return df.nlargest(5, 'track_popularity') if 'track_popularity' in df.columns else df.head(5)
 
 def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, custom_prompt: str = None) -> str:
     headers = {
@@ -139,19 +128,7 @@ You are an AI that extracts music preferences from user input.
 Respond only in valid JSON with 4 keys: genre, mood, tempo, artist_or_song.
 If a value is not explicitly or implicitly stated, use null.
 
-Understand tone and emotion to classify mood:
-- "I feel like crying", "it's been a tough day" → "sad"
-- "let’s party", "hyped up", "workout music" → "energetic"
-- "need to relax", "chill", "lofi", "study" → "calm"
-- "sunny day", "good mood", "sing along" → "happy"
-
-Also extract genre (pop, rock, classical, etc.), tempo (slow, medium, fast), or artist/song names.
-
-Example:
-Input: "Play something upbeat, I love Dua Lipa."
-Output: {{"genre": null, "mood": "happy", "tempo": "fast", "artist_or_song": "Dua Lipa"}}
-
-Input: "{message}"
+Message: "{message}"
 """
 
     body = {
@@ -174,9 +151,7 @@ Input: "{message}"
         return parsed
     except Exception as e:
         print("Groq Extraction Error:", e)
-        return {
-            "genre": None, "mood": None, "tempo": None, "artist_or_song": None
-        }
+        return {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
 
 def map_free_text_to_mood(text: str) -> str:
     text = text.lower()
@@ -188,8 +163,7 @@ def map_free_text_to_mood(text: str) -> str:
         return "calm"
     elif any(word in text for word in ["happy", "joy", "sunny", "fun", "good mood"]):
         return "happy"
-    else:
-        return "calm"
+    return "calm"
 
 def split_mode_category(mode_category: str) -> tuple:
     if isinstance(mode_category, str):
@@ -207,7 +181,5 @@ def precompute_recommendation_map(df: pd.DataFrame) -> dict:
         tempo = row.get("tempo_category", "medium")
         mood, energy = split_mode_category(row.get("mode_category", "calm calm"))
         key = build_recommendation_key(genre, mood, energy, tempo)
-        if key not in index_map:
-            index_map[key] = []
-        index_map[key].append(row)
+        index_map.setdefault(key, []).append(row)
     return index_map

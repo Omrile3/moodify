@@ -9,7 +9,7 @@ from typing import Optional
 
 from recommender_eng import recommend_engine
 from memory import SessionMemory
-from utils import generate_chat_response, extract_preferences_from_message
+from utils import generate_chat_response, extract_preferences_from_message, search_spotify_preview
 
 # Load Groq key
 load_dotenv()
@@ -83,9 +83,11 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if preference.dict().get(key):
             prefs[key] = preference.dict()[key]
-    song = recommend_engine(prefs)
 
-    from utils import search_spotify_preview
+    song = recommend_engine(prefs, session.get("history"))
+
+    memory.add_to_history(preference.session_id, song["song"])
+
     spotify_info = search_spotify_preview(song["song"], song["artist"])
 
     # No match fallback
@@ -118,7 +120,8 @@ def handle_command(command_input: CommandInput):
 
     if "another" in cmd:
         prefs = memory.get_session(session_id)
-        song = recommend_engine(prefs)
+        song = recommend_engine(prefs, prefs.get("history"))
+        memory.add_to_history(session_id, song["song"])
         gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
         return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
 
