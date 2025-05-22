@@ -63,7 +63,7 @@ document.getElementById("user-input").addEventListener("keypress", function(even
   .then(data => {
     appendBotMessage(data.response || "⚠️ Something went wrong.");
   });
-}
+
 
 function appendUserMessage(msg) {
   const chatBox = document.getElementById("chat-box");
