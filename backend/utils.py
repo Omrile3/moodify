@@ -68,14 +68,36 @@ def fuzzy_match_artist_song(df, query: str):
     df['track_artist'] = df['track_artist'].fillna("").astype(str).str.lower()
     df['track_name'] = df['track_name'].fillna("").astype(str).str.lower()
 
-    artist_matches = difflib.get_close_matches(query, df['track_artist'], n=5, cutoff=0.6)
-    song_matches = difflib.get_close_matches(query, df['track_name'].str.lower(), n=5, cutoff=0.6)
-    if artist_matches:
-        return df[df['track_artist'].str.lower().isin(artist_matches)]
-    elif song_matches:
-        return df[df['track_name'].str.lower().isin(song_matches)]
-    else:
-        return df.nlargest(5, 'popularity') if 'popularity' in df.columns else df.head(5)
+    # Prioritize exact matches
+    exact_artist_matches = df[df['track_artist'] == query]
+    exact_song_matches = df[df['track_name'] == query]
+
+    if not exact_artist_matches.empty:
+        return exact_artist_matches
+    if not exact_song_matches.empty:
+        return exact_song_matches
+
+    # Check for playlist-based similarity
+    playlist_matches = df[df['track_name'] == query]
+    if not playlist_matches.empty:
+        playlist_id = playlist_matches.iloc[0].get("playlist_id")
+        if playlist_id:
+            print(f"Finding songs in the same playlist: {playlist_id}")
+            return df[df["playlist_id"] == playlist_id]
+
+    # Feature-based similarity for songs
+    if "valence" in df.columns and "energy" in df.columns and "danceability" in df.columns:
+        print("Performing feature-based similarity matching.")
+        target_song = df[df['track_name'] == query]
+        if not target_song.empty:
+            target_features = target_song[["valence", "energy", "danceability"]].iloc[0].values
+            df["similarity"] = cosine_similarity(
+                [target_features], df[["valence", "energy", "danceability"]].values
+            ).flatten()
+            return df.sort_values(by="similarity", ascending=False).head(5)
+
+    # Fallback: Consider user preferences if available
+    return df.nlargest(5, 'popularity') if 'popularity' in df.columns else df.head(5)
 
 def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, custom_prompt: str = None) -> str:
     headers = {
