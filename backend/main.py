@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 from typing import Optional
 
-from recommender import recommend_song
+from backend.recommender_eng import recommend_engine
 from memory import SessionMemory
 from utils import generate_chat_response, extract_preferences_from_message
 
@@ -81,7 +81,7 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
             memory.update_session(preference.session_id, key, val)
 
     prefs = memory.get_session(preference.session_id)
-    song = recommend_song(prefs)
+    song = recommend_engine(prefs)
 
     # No match fallback
     if not song or song['song'] == "N/A":
@@ -102,7 +102,7 @@ def handle_command(command_input: CommandInput):
 
     if "another" in cmd:
         prefs = memory.get_session(session_id)
-        song = recommend_song(prefs)
+        song = recommend_engine(prefs)
         gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
         return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
 
