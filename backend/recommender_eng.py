@@ -40,20 +40,34 @@ recommendation_map = precompute_recommendation_map(df)
 def recommend_engine(preferences: dict):
     filtered = df.copy()
 
+    print("Initial DataFrame size:", filtered.shape)
+
     if preferences.get("mood") and preferences["mood"] not in MOOD_VECTORS:
         preferences["mood"] = map_free_text_to_mood(preferences["mood"])
 
+    print("After mood mapping:", filtered.shape)
+
     if preferences.get("artist_or_song"):
+        print("Filtering by artist or song:", preferences["artist_or_song"])
         filtered = fuzzy_match_artist_song(filtered, preferences["artist_or_song"])
 
+    print("After artist/song filtering:", filtered.shape)
+
     if preferences.get("genre"):
+        print("Filtering by genre:", preferences["genre"])
         filtered = filtered[filtered['playlist_genre'].str.lower() == preferences["genre"].lower()]
 
+    print("After genre filtering:", filtered.shape)
+
     if preferences.get("tempo"):
+        print("Filtering by tempo:", preferences["tempo"])
         bpm_range = convert_tempo_to_bpm(preferences["tempo"])
         filtered = filtered[(filtered['tempo'] >= bpm_range[0]) & (filtered['tempo'] <= bpm_range[1])]
 
+    print("After tempo filtering:", filtered.shape)
+
     if preferences.get("mood") in MOOD_VECTORS:
+        print("Applying mood vector similarity for mood:", preferences["mood"])
         mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
         similarities = cosine_similarity(mood_vec, filtered[features].values).flatten()
         filtered["similarity"] = similarities
@@ -61,7 +75,10 @@ def recommend_engine(preferences: dict):
     elif 'track_popularity' in filtered.columns:
         filtered = filtered.sort_values(by='track_popularity', ascending=False)
 
+    print("After mood similarity filtering:", filtered.shape)
+
     if not filtered.empty:
+        print("Final filtered DataFrame size:", filtered.shape)
         top = filtered.iloc[0]
     else:
         genre = preferences.get("genre", "rock")
