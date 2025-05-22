@@ -35,45 +35,55 @@ MOOD_VECTORS = {
     "calm": [0.5, 0.4, 0.3, 0.7, 0.5]
 }
 
-# Fallback recommendation map
+# Precompute recommendation buckets
 recommendation_map = precompute_recommendation_map(df)
 
 def recommend_engine(preferences: dict, session_memory=None):
     if session_memory is None:
         session_memory = set()
-    filtered = df.copy()
 
+    filtered = df.copy()
+    user_query = preferences.get("artist_or_song")
+
+    # Convert free mood text to known category
     if preferences.get("mood") and preferences["mood"] not in MOOD_VECTORS:
         preferences["mood"] = map_free_text_to_mood(preferences["mood"])
 
-    if preferences.get("artist_or_song"):
-        filtered = fuzzy_match_artist_song(filtered, preferences["artist_or_song"])
+    # Handle specific artist or song queries first
+    if user_query:
+        matched = fuzzy_match_artist_song(filtered, user_query)
+        if not matched.empty:
+            filtered = matched
+        else:
+            preferences["note"] = f"Couldn’t find an exact match for '{user_query}', so I’m showing close alternatives."
 
+    # Filter by genre
     if preferences.get("genre"):
-        genre_filter = preferences["genre"].lower()
-        genre_matched = filtered[filtered['playlist_genre'].str.lower() == genre_filter]
-        if not genre_matched.empty:
-            filtered = genre_matched
+        genre_match = filtered[filtered["playlist_genre"].str.lower() == preferences["genre"].lower()]
+        if not genre_match.empty:
+            filtered = genre_match
 
+    # Filter by tempo (bpm range)
     if preferences.get("tempo"):
-        bpm_range = convert_tempo_to_bpm(preferences["tempo"])
-        filtered = filtered[(filtered['tempo'] >= bpm_range[0]) & (filtered['tempo'] <= bpm_range[1])]
+        min_bpm, max_bpm = convert_tempo_to_bpm(preferences["tempo"])
+        filtered = filtered[(filtered["tempo"] >= min_bpm) & (filtered["tempo"] <= max_bpm)]
 
+    # Mood-based ranking using cosine similarity
     if preferences.get("mood") in MOOD_VECTORS and not filtered.empty:
         mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
         similarities = cosine_similarity(mood_vec, filtered[features].values).flatten()
         filtered["similarity"] = similarities
         filtered = filtered.sort_values(by="similarity", ascending=False)
     elif 'track_popularity' in filtered.columns:
-        filtered = filtered.sort_values(by='track_popularity', ascending=False)
+        filtered = filtered.sort_values(by="track_popularity", ascending=False)
 
+    # Avoid recommending previously suggested tracks
+    filtered = filtered[~filtered["track_name"].isin(session_memory)]
+
+    # Fallback if needed
     if not filtered.empty:
-        filtered = filtered[~filtered['track_name'].isin(session_memory)]
-        if filtered.empty:
-            session_memory.clear()
-            filtered = df.copy()
-
         top = filtered.iloc[0]
+        session_memory.add(top["track_name"])
     else:
         genre = preferences.get("genre", "rock")
         tempo = preferences.get("tempo", "medium")
@@ -85,8 +95,8 @@ def recommend_engine(preferences: dict, session_memory=None):
             return None
         top = random.choice(fallback_list)
 
-    # Enrich with Spotify preview
-    preview_data = search_spotify_preview(top.get("track_name", ""), top.get("track_artist", ""))
+    # Get Spotify preview data
+    preview = search_spotify_preview(top.get("track_name", ""), top.get("track_artist", ""))
 
     return {
         "song": top.get("track_name", "Unknown"),
@@ -94,6 +104,7 @@ def recommend_engine(preferences: dict, session_memory=None):
         "genre": top.get("playlist_genre", "Unknown"),
         "mood": preferences.get("mood", "Unknown"),
         "tempo": top.get("tempo", "Unknown"),
-        "spotify_url": preview_data.get("spotify_url"),
-        "preview_url": preview_data.get("preview_url")
+        "spotify_url": preview.get("spotify_url"),
+        "preview_url": preview.get("preview_url"),
+        "note": preferences.get("note", None)
     }

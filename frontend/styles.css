@@ -27,7 +27,7 @@ body {
   .chat-box {
     height: 400px;
     overflow-y: auto;
-    background: #434343;
+    background: #484747;
     padding: 10px;
     border-radius: 5px;
     margin-bottom: 10px;
@@ -58,6 +58,31 @@ body {
     cursor: pointer;
   }
   
+  .spotify-preview {
+    background: #222;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 10px;
+    text-align: center;
+  }
+
+  .spotify-preview img {
+    max-width: 100%;
+    border-radius: 5px;
+    margin-bottom: 10px;
+  }
+
+  .spotify-preview a {
+    color: #00ffcc;
+    text-decoration: none;
+    font-weight: bold;
+  }
+
+  .spotify-preview audio {
+    margin-top: 10px;
+    width: 100%;
+  }
+
   .options {
     margin-top: 10px;
   }

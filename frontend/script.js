@@ -22,6 +22,9 @@ window.sendMessage = function() {
   .then(res => res.json())
   .then(data => {
     appendBotMessage(data.response || "⚠️ Something went wrong.");
+    if (data.spotify_url || data.preview_url) {
+      updateSpotifyPreview(data);
+    }
   })
   .catch(error => {
     console.error("API error:", error);
@@ -61,6 +64,16 @@ function appendUserMessage(msg) {
   const chatBox = document.getElementById("chat-box");
   chatBox.innerHTML += `<p><strong>You:</strong> ${msg}</p>`;
   chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function updateSpotifyPreview(data) {
+  const previewContainer = document.getElementById("spotify-preview");
+  previewContainer.innerHTML = `
+    <img src="${data.cover_art || ''}" alt="Album Art">
+    <p><strong>${data.song || 'Unknown Song'}</strong> by ${data.artist || 'Unknown Artist'}</p>
+    ${data.preview_url ? `<audio controls src="${data.preview_url}"></audio>` : ''}
+    ${data.spotify_url ? `<a href="${data.spotify_url}" target="_blank">🎧 Listen on Spotify</a>` : ''}
+  `;
 }
 
 function appendBotMessage(msg) {
