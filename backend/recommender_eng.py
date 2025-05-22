@@ -68,7 +68,13 @@ def recommend_engine(preferences: dict):
 
     if preferences.get("mood") in MOOD_VECTORS:
         print("Applying mood vector similarity for mood:", preferences["mood"])
-        mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
+        if filtered.empty:
+            print("Filtered DataFrame is empty. Skipping mood vector similarity.")
+        else:
+            mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
+            similarities = cosine_similarity(mood_vec, filtered[features].values).flatten()
+            filtered["similarity"] = similarities
+            filtered = filtered.sort_values(by="similarity", ascending=False)
         similarities = cosine_similarity(mood_vec, filtered[features].values).flatten()
         filtered["similarity"] = similarities
         filtered = filtered.sort_values(by="similarity", ascending=False)
