@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from fastapi.responses import JSONResponse
 import uvicorn
 import os
 from dotenv import load_dotenv
@@ -89,14 +90,23 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
 
     # No match fallback
     if not song or song['song'] == "N/A":
-        response_html = "🟢 <span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
+        response_html = (
+            "🟢 <span style='color:green'>I couldn’t find a match. "
+            "Can you tell me more about what you're looking for? "
+            "For example, your favorite artist, genre, or the vibe you're into?</span>"
+        )
+        response_html += (
+            "<br>🎤 You can also ask for a specific artist, genre, or even a mood like 'happy' or 'calm'."
+        )
     else:
         gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
         response_html = f"<span style='color:green'>{gpt_message}</span>"
-        if spotify_info.get("preview_url"):
+        if spotify_info and spotify_info.get("preview_url"):
             response_html += f"<br><audio controls src='{spotify_info['preview_url']}'></audio>"
-        elif spotify_info.get("spotify_url"):
+        elif spotify_info and spotify_info.get("spotify_url"):
             response_html += f"<br><a href='{spotify_info['spotify_url']}' target='_blank'>🎧 Listen on Spotify</a>"
+        else:
+            response_html += "<br>⚠️ No Spotify preview available."
 
     return {"response": response_html}
 

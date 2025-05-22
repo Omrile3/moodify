@@ -98,15 +98,22 @@ def recommend_engine(preferences: dict, session_memory=None):
         print("Final filtered DataFrame size:", filtered.shape)
         top = filtered.iloc[0]
     else:
-        genre = preferences.get("genre", "rock")
-        tempo = preferences.get("tempo", "medium")
-        mood = preferences.get("mood", "calm")
-        energy = "energetic"
-        key = build_recommendation_key(genre, mood, energy, tempo)
-        fallback_list = recommendation_map.get(key, [])
-        if not fallback_list:
-            return None
-        top = random.choice(fallback_list)
+        if "playlist_name" in top:
+            playlist_name = top["playlist_name"]
+            print(f"No matches found. Recommending another song from the same playlist: {playlist_name}")
+            playlist_songs = df[df["playlist_name"] == playlist_name]
+            if not playlist_songs.empty:
+                top = playlist_songs.sample(1).iloc[0]
+            else:
+                genre = preferences.get("genre", "rock")
+                tempo = preferences.get("tempo", "medium")
+                mood = preferences.get("mood", "calm")
+                energy = "energetic"
+                key = build_recommendation_key(genre, mood, energy, tempo)
+                fallback_list = recommendation_map.get(key, [])
+                if not fallback_list:
+                    return None
+                top = random.choice(fallback_list)
 
     return {
         "song": top.get("track_name", "Unknown"),
