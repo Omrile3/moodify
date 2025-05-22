@@ -37,7 +37,7 @@ Respond in a casual, friendly tone and say why it's a good fit in 1–2 sentence
 """
 
     body = {
-        "model": "mixtral-8x7b-32768",
+        "model": "llama3-70b-8192",
         "messages": [
             {"role": "system", "content": "You are a helpful music recommendation assistant."},
             {"role": "user", "content": prompt}
@@ -80,7 +80,7 @@ Input: "{message}"
 """
 
     body = {
-        "model": "mixtral-8x7b-32768",
+        "model": "llama3-70b-8192",
         "messages": [
             {"role": "system", "content": "You extract music preferences from user messages in JSON."},
             {"role": "user", "content": prompt}
