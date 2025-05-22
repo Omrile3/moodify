@@ -28,11 +28,26 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
         "Content-Type": "application/json"
     }
 
-    prompt = custom_prompt or f"""
-The user likes {preferences.get('genre', 'some genre')} music, is feeling {preferences.get('mood', 'some mood')}, and prefers {preferences.get('tempo', 'any')} tempo.
-Suggest a song that fits: "{song_dict['song']}" by {song_dict['artist']} ({song_dict['genre']}, {song_dict['tempo']} tempo).
-Respond in a casual, friendly tone and say why it's a good fit in 1–2 sentences.
+    prompt = f"""
+You are an AI that extracts music preferences from user input.
+Respond only in valid JSON with 4 keys: genre, mood, tempo, artist_or_song.
+If a value is not explicitly or implicitly stated, use null.
+
+Understand tone and emotion to classify mood:
+- "I feel like crying", "it's been a tough day" → "sad"
+- "let’s party", "hyped up", "workout music" → "energetic"
+- "need to relax", "chill", "lofi", "study" → "calm"
+- "sunny day", "good mood", "sing along" → "happy"
+
+Also extract genre (pop, rock, classical, etc.), tempo (slow, medium, fast), or artist/song names.
+
+Example:
+Input: "Play something upbeat, I love Dua Lipa."
+Output: {"genre": null, "mood": "happy", "tempo": "fast", "artist_or_song": "Dua Lipa"}
+
+Input: "{message}"
 """
+
 
     body = {
         "model": "mixtral-8x7b-32768",
@@ -58,11 +73,23 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
     }
 
     prompt = f"""
-Extract the music preferences from this message in JSON format:
-Keys: genre, mood, tempo, artist_or_song
-All keys lowercase. Use null if not mentioned.
+You are an AI that extracts music preferences from user input.
+Respond only in valid JSON with 4 keys: genre, mood, tempo, artist_or_song.
+If a value is not explicitly or implicitly stated, use null.
 
-Message: "{message}"
+Understand tone and emotion to classify mood:
+- "I feel like crying", "it's been a tough day" → "sad"
+- "let’s party", "hyped up", "workout music" → "energetic"
+- "need to relax", "chill", "lofi", "study" → "calm"
+- "sunny day", "good mood", "sing along" → "happy"
+
+Also extract genre (pop, rock, classical, etc.), tempo (slow, medium, fast), or artist/song names.
+
+Example:
+Input: "Play something upbeat, I love Dua Lipa."
+Output: {{"genre": null, "mood": "happy", "tempo": "fast", "artist_or_song": "Dua Lipa"}}
+
+Input: "{message}"
 """
 
     body = {
@@ -88,3 +115,4 @@ Message: "{message}"
         return {
             "genre": None, "mood": None, "tempo": None, "artist_or_song": None
         }
+
