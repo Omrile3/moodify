@@ -19,7 +19,7 @@ def get_spotify_access_token():
         return response.json().get("access_token")
     except Exception as e:
         print("Spotify token error:", e)
-        return None
+        return Nonea
 
 def search_spotify_preview(song_name, artist_name):
     token = get_spotify_access_token()
