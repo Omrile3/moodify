@@ -99,12 +99,12 @@ def recommend_engine(preferences: dict, session_memory=None):
     preview = search_spotify_preview(top.get("track_name", ""), top.get("track_artist", ""))
 
     return {
-        "song": top.get("track_name", "Unknown"),
-        "artist": top.get("track_artist", "Unknown"),
+        "song": top.get("track_name", "Unknown Song"),
+        "artist": top.get("track_artist", "Unknown Artist"),
         "genre": top.get("playlist_genre", "Unknown"),
         "mood": preferences.get("mood", "Unknown"),
         "tempo": top.get("tempo", "Unknown"),
         "spotify_url": preview.get("spotify_url"),
         "preview_url": preview.get("preview_url"),
-        "note": preferences.get("note", None)
+        "note": preferences.get("note", "No additional context provided.")
     }

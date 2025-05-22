@@ -21,7 +21,11 @@ window.sendMessage = function() {
   })
   .then(res => res.json())
   .then(data => {
-    appendBotMessage(data.response || "⚠️ Something went wrong.");
+    let botMessage = data.response || "⚠️ Something went wrong.";
+    if (data.note) {
+      botMessage += `<br><em>${data.note}</em>`;
+    }
+    appendBotMessage(botMessage);
     if (data.spotify_url || data.preview_url) {
       updateSpotifyPreview(data);
     }
