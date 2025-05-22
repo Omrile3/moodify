@@ -14,8 +14,17 @@ def convert_tempo_to_bpm(tempo_category: str) -> tuple:
     }.get(tempo_category.lower(), (0, 300))
 
 def fuzzy_match_artist_song(df, query: str):
-    query = str(query).lower()  # Ensure query is a string
-    artist_matches = difflib.get_close_matches(query, df['track_artist'].str.lower(), n=5, cutoff=0.6)
+    if not isinstance(query, str):
+        print(f"Invalid query type: {type(query)}. Expected a string.")
+        return df.head(5)  # Return top 5 rows as a fallback
+
+    query = query.lower()
+    print(f"Performing fuzzy match for query: {query}")
+    # Ensure columns are strings and handle missing values
+    df['track_artist'] = df['track_artist'].fillna("").astype(str).str.lower()
+    df['track_name'] = df['track_name'].fillna("").astype(str).str.lower()
+
+    artist_matches = difflib.get_close_matches(query, df['track_artist'], n=5, cutoff=0.6)
     song_matches = difflib.get_close_matches(query, df['track_name'].str.lower(), n=5, cutoff=0.6)
     if artist_matches:
         return df[df['track_artist'].str.lower().isin(artist_matches)]

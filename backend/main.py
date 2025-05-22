@@ -114,7 +114,17 @@ def handle_command(command_input: CommandInput):
 def get_session(session_id: str):
     return memory.get_session(session_id)
 
-@app.get("/test-cors")
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    import traceback
+    error_details = traceback.format_exc()
+    print(f"Unhandled exception: {exc}\nDetails:\n{error_details}")
+    return JSONResponse(
+        status_code=500,
+        content={"message": "An unexpected error occurred. Please try again later."},
+    )
+
+@app.get("/test-cors")  # Test endpoint to verify CORS
 def test_cors():
     return {"message": "CORS is working!"}
 
