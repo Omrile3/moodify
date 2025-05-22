@@ -1,4 +1,48 @@
 import difflib
+import os
+import base64
+import requests
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
+def get_spotify_access_token():
+    client_id = os.getenv("SPOTIFY_CLIENT_ID")
+    client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
+    token_url = "https://accounts.spotify.com/api/token"
+
+    auth_header = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+    headers = {"Authorization": f"Basic {auth_header}"}
+    data = {"grant_type": "client_credentials"}
+
+    try:
+        response = requests.post(token_url, headers=headers, data=data)
+        return response.json().get("access_token")
+    except Exception as e:
+        print("Spotify token error:", e)
+        return None
+
+def search_spotify_preview(song_name, artist_name):
+    token = get_spotify_access_token()
+    if not token:
+        return {}
+
+    query = f"{song_name} {artist_name}"
+    url = f"https://api.spotify.com/v1/search?q={requests.utils.quote(query)}&type=track&limit=1"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    try:
+        res = requests.get(url, headers=headers)
+        items = res.json()["tracks"]["items"]
+        if not items:
+            return {}
+        track = items[0]
+        return {
+            "spotify_url": track["external_urls"]["spotify"],
+            "preview_url": track.get("preview_url")
+        }
+    except Exception as e:
+        print("Spotify search error:", e)
+        return {}
 import requests
 import json
 import re

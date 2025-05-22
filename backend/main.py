@@ -79,17 +79,22 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
     prefs = memory.get_session(preference.session_id)
     song = recommend_engine(prefs)
 
+    from utils import search_spotify_preview
+    spotify_info = search_spotify_preview(song["song"], song["artist"])
+
     # No match fallback
     if not song or song['song'] == "N/A":
-        return {
-            "response": "🟢 <span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
-        }
+        response_html = "🟢 <span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
+    else:
+        gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
+        response_html = f"<span style='color:green'>{gpt_message}</span>"
+        if spotify_info.get("spotify_url"):
+            response_html += f"<br><a href='{spotify_info['spotify_url']}' target='_blank'>🎧 Listen on Spotify</a>"
+        if spotify_info.get("preview_url"):
+            response_html += f"<br><audio controls src='{spotify_info['preview_url']}'></audio>"
 
-    gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
+    return {"response": response_html}
 
-    return {
-        "response": f"🟢 <span style='color:green'>{gpt_message}</span>"
-    }
 
 @app.post("/command")
 def handle_command(command_input: CommandInput):

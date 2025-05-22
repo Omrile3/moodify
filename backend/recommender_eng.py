@@ -56,6 +56,12 @@ def recommend_engine(preferences: dict):
     if preferences.get("genre"):
         print("Filtering by genre:", preferences["genre"])
         filtered = filtered[filtered['playlist_genre'].str.lower() == preferences["genre"].lower()]
+        if filtered.empty:
+            print(f"No songs found for genre: {preferences['genre']}. Falling back to top popular songs.")
+            if 'track_popularity' in df.columns:
+                filtered = df.nlargest(5, 'track_popularity')
+            else:
+                filtered = df.head(5)
 
     print("After genre filtering:", filtered.shape)
 
@@ -72,9 +78,7 @@ def recommend_engine(preferences: dict):
             print("Filtered DataFrame is empty. Skipping mood vector similarity.")
         else:
             mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
-            similarities = cosine_similarity(mood_vec, filtered[features].values).flatten()
-            filtered["similarity"] = similarities
-            filtered = filtered.sort_values(by="similarity", ascending=False)
+            mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
         similarities = cosine_similarity(mood_vec, filtered[features].values).flatten()
         filtered["similarity"] = similarities
         filtered = filtered.sort_values(by="similarity", ascending=False)
