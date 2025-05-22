@@ -2,7 +2,7 @@ import difflib
 import requests
 import json
 
-CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 def convert_tempo_to_bpm(tempo_category: str) -> tuple:
     return {
@@ -24,86 +24,67 @@ def fuzzy_match_artist_song(df, query: str):
 
 def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, custom_prompt: str = None) -> str:
     headers = {
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
     }
 
     prompt = custom_prompt or f"""
 The user likes {preferences.get('genre', 'some genre')} music, is feeling {preferences.get('mood', 'some mood')}, and prefers {preferences.get('tempo', 'any')} tempo.
-Suggest a great song: "{song_dict['song']}" by {song_dict['artist']} ({song_dict['genre']}, {song_dict['tempo']} tempo)
-Explain why it fits their vibe in 1 sentence.
+Suggest a song that fits: "{song_dict['song']}" by {song_dict['artist']} ({song_dict['genre']}, {song_dict['tempo']} tempo).
+Respond in a casual, friendly tone and say why it's a good fit in 1–2 sentences.
 """
 
     body = {
-        "model": "claude-3-haiku-20240307",
-        "max_tokens": 256,
+        "model": "mixtral-8x7b-32768",
+        "messages": [
+            {"role": "system", "content": "You are a helpful music recommendation assistant."},
+            {"role": "user", "content": prompt}
+        ],
         "temperature": 0.7,
-        "messages": [{"role": "user", "content": prompt}]
+        "max_tokens": 250
     }
 
     try:
-        response = requests.post(CLAUDE_API_URL, headers=headers, json=body)
-        data = response.json()
-        if "content" in data and isinstance(data["content"], list):
-            return data["content"][0].get("text", "").strip()
-        else:
-            print("Claude format error:", data)
-            return "I had trouble generating a suggestion."
+        response = requests.post(GROQ_API_URL, headers=headers, json=body)
+        return response.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        print("Claude Error:", e)
+        print("Groq Chat Error:", e)
         return f"Here's a great track: '{song_dict['song']}' by {song_dict['artist']}."
 
 def extract_preferences_from_message(message: str, api_key: str) -> dict:
     headers = {
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
     }
 
     prompt = f"""
-Extract music preferences from this message in valid JSON format.
-Keys: genre, mood, tempo, artist_or_song. All lowercase. Use null if not present.
+Extract the music preferences from this message in JSON format:
+Keys: genre, mood, tempo, artist_or_song
+All keys lowercase. Use null if not mentioned.
 
-User input: "{message}"
+Message: "{message}"
 """
 
     body = {
-        "model": "claude-3-haiku-20240307",
-        "max_tokens": 256,
+        "model": "mixtral-8x7b-32768",
+        "messages": [
+            {"role": "system", "content": "You extract music preferences from user messages in JSON."},
+            {"role": "user", "content": prompt}
+        ],
         "temperature": 0.3,
-        "messages": [{"role": "user", "content": prompt}]
+        "max_tokens": 250
     }
 
     try:
-        response = requests.post(CLAUDE_API_URL, headers=headers, json=body)
-        data = response.json()
-
-        if "content" in data and isinstance(data["content"], list):
-            text = data["content"][0].get("text", "").strip()
-        else:
-            print("Claude extraction format error:", data)
-            return {
-                "genre": None, "mood": None, "tempo": None, "artist_or_song": None
-            }
-
-        # Parse text block safely into JSON
-        if "{" in text and "}" in text:
-            parsed = json.loads(text[text.index("{"):text.rindex("}")+1])
-        else:
-            return {
-                "genre": None, "mood": None, "tempo": None, "artist_or_song": None
-            }
-
-        # Ensure keys
+        response = requests.post(GROQ_API_URL, headers=headers, json=body)
+        text = response.json()["choices"][0]["message"]["content"]
+        parsed = json.loads(text[text.index("{"):text.rindex("}")+1])
         for key in ["genre", "mood", "tempo", "artist_or_song"]:
             if key not in parsed:
                 parsed[key] = None
-
         return parsed
-
     except Exception as e:
-        print("Extraction error:", e)
+        print("Groq Extraction Error:", e)
         return {
             "genre": None, "mood": None, "tempo": None, "artist_or_song": None
         }

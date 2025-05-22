@@ -10,9 +10,9 @@ from recommender import recommend_song
 from memory import SessionMemory
 from utils import generate_chat_response, extract_preferences_from_message
 
-# Load Claude key
+# Load Groq key
 load_dotenv()
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 app = FastAPI()
 memory = SessionMemory()
@@ -50,15 +50,15 @@ def recommend(preference: PreferenceInput):
     if user_message.strip().lower() in greetings:
         return {
             "response": (
-                "🟢 <span style='color:green'>Hey! I'm <strong>Moodify</strong> 🎧 — your Claude-powered music buddy. "
+                "🟢 <span style='color:green'>Hey! I'm <strong>Moodify</strong> 🎧 — your Groq-powered music buddy. "
                 "Tell me how you feel, your favorite artist, or the kind of music you want.</span>"
             )
         }
 
     # Extract intent from free-text
-    extracted = extract_preferences_from_message(user_message, ANTHROPIC_API_KEY)
+    extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
 
-    # If Claude couldn’t extract anything, ask the user nicely
+    # If extraction fails or all values are null
     if not extracted or not any(extracted.values()):
         clarification_prompt = f"""
 The user said: "{user_message}"
@@ -68,12 +68,12 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
         gpt_message = generate_chat_response(
             {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
             {"genre": None, "mood": None, "tempo": None},
-            ANTHROPIC_API_KEY,
+            GROQ_API_KEY,
             custom_prompt=clarification_prompt
         )
         return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
 
-    # Update memory
+    # Update session memory
     session = memory.get_session(preference.session_id)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         val = extracted.get(key)
@@ -83,13 +83,13 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
     prefs = memory.get_session(preference.session_id)
     song = recommend_song(prefs)
 
-    # No result
+    # No match fallback
     if not song or song['song'] == "N/A":
         return {
             "response": "🟢 <span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
         }
 
-    gpt_message = generate_chat_response(song, prefs, ANTHROPIC_API_KEY)
+    gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
 
     return {
         "response": f"🟢 <span style='color:green'>{gpt_message}</span>"
@@ -103,7 +103,7 @@ def handle_command(command_input: CommandInput):
     if "another" in cmd:
         prefs = memory.get_session(session_id)
         song = recommend_song(prefs)
-        gpt_message = generate_chat_response(song, prefs, ANTHROPIC_API_KEY)
+        gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
         return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
 
     elif "change" in cmd:
