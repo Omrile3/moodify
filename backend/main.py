@@ -77,6 +77,11 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
             memory.update_session(preference.session_id, key, val)
 
     prefs = memory.get_session(preference.session_id)
+
+    # Dynamically update preferences for switching styles or moods
+    for key in ["genre", "mood", "tempo", "artist_or_song"]:
+        if preference.dict().get(key):
+            prefs[key] = preference.dict()[key]
     song = recommend_engine(prefs)
 
     from utils import search_spotify_preview
