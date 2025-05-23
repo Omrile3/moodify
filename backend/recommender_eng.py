@@ -67,6 +67,7 @@ def recommend_engine(preferences: dict, session_memory=None):
             "note": preferences["note"]
         }
 
+    print(f"Initial DataFrame size: {filtered.shape}")
     # Filter by artist or song
     if query:
         query = query.lower().strip()
@@ -87,16 +88,19 @@ def recommend_engine(preferences: dict, session_memory=None):
                 preferences["note"] = f"⚠️ Couldn't find anything related to '{query}'. Showing popular songs."
                 filtered = df.copy()
 
+    print(f"After artist/song filtering: {filtered.shape}")
     # Filter by genre
     if preferences.get("genre"):
         genre = preferences["genre"].lower()
         filtered = filtered[filtered['playlist_genre'].str.lower() == genre] or filtered
 
+    print(f"After genre filtering: {filtered.shape}")
     # Filter by tempo
     if preferences.get("tempo"):
         min_bpm, max_bpm = convert_tempo_to_bpm(preferences["tempo"])
         filtered = filtered[(filtered["tempo"] >= min_bpm) & (filtered["tempo"] <= max_bpm)]
 
+    print(f"After tempo filtering: {filtered.shape}")
     # Mood cosine similarity sort
     if preferences.get("mood") in MOOD_VECTORS and not filtered.empty:
         mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
@@ -109,6 +113,7 @@ def recommend_engine(preferences: dict, session_memory=None):
     # Remove already recommended
     filtered = filtered[~filtered["track_name"].isin(session_memory)]
 
+    print(f"After mood similarity filtering: {filtered.shape}")
     if not filtered.empty:
         top = filtered.iloc[0]
         session_memory.add(top["track_name"])
