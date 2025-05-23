@@ -35,7 +35,7 @@ MOOD_VECTORS = {
     "calm": [0.5, 0.4, 0.3, 0.7, 0.5]
 }
 
-# Precompute recommendation buckets
+# Fallback recommendation map
 recommendation_map = precompute_recommendation_map(df)
 
 def recommend_engine(preferences: dict, session_memory=None):
@@ -45,46 +45,71 @@ def recommend_engine(preferences: dict, session_memory=None):
     filtered = df.copy()
     user_query = preferences.get("artist_or_song")
 
-    # Convert free mood text to known category
+    # Map unknown mood
     if preferences.get("mood") and preferences["mood"] not in MOOD_VECTORS:
         preferences["mood"] = map_free_text_to_mood(preferences["mood"])
 
-    # Handle specific artist or song queries first
+    # Collect missing context
+    missing = []
+    for key in ["artist_or_song", "genre", "mood", "tempo"]:
+        if not preferences.get(key):
+            missing.append(key)
+
+    # If too little context, return guiding message
+    if len(missing) >= 3:  # Less than 2 preferences
+        preferences["note"] = (
+            "🎯 I need a bit more to recommend something great. "
+            "Could you tell me one or more of the following: your mood, favorite artist, genre, or tempo?"
+        )
+        return {
+            "song": "N/A",
+            "artist": "N/A",
+            "genre": "N/A",
+            "mood": preferences.get("mood", "Unknown"),
+            "tempo": "N/A",
+            "spotify_url": None,
+            "preview_url": None,
+            "note": preferences["note"]
+        }
+
+    # Handle artist or song input
     if user_query:
         matched = fuzzy_match_artist_song(filtered, user_query)
         if not matched.empty:
             filtered = matched
         else:
-            preferences["note"] = f"Couldn’t find an exact match for '{user_query}', so I’m showing close alternatives."
+            preferences["note"] = f"Couldn't find an exact match for '{user_query}', so I'm showing close alternatives."
+            filtered = df
 
-    # Filter by genre
+    # Genre filter
     if preferences.get("genre"):
         genre_match = filtered[filtered["playlist_genre"].str.lower() == preferences["genre"].lower()]
         if not genre_match.empty:
             filtered = genre_match
 
-    # Filter by tempo (bpm range)
+    # Tempo filter
     if preferences.get("tempo"):
         min_bpm, max_bpm = convert_tempo_to_bpm(preferences["tempo"])
         filtered = filtered[(filtered["tempo"] >= min_bpm) & (filtered["tempo"] <= max_bpm)]
 
-    # Mood-based ranking using cosine similarity
+    # Mood-based cosine similarity
     if preferences.get("mood") in MOOD_VECTORS and not filtered.empty:
         mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
         similarities = cosine_similarity(mood_vec, filtered[features].values).flatten()
         filtered["similarity"] = similarities
         filtered = filtered.sort_values(by="similarity", ascending=False)
-    elif 'track_popularity' in filtered.columns:
+    elif "track_popularity" in filtered.columns:
         filtered = filtered.sort_values(by="track_popularity", ascending=False)
 
-    # Avoid recommending previously suggested tracks
+    # Filter out previously recommended songs
     filtered = filtered[~filtered["track_name"].isin(session_memory)]
 
-    # Fallback if needed
+    # If we still have matches
     if not filtered.empty:
         top = filtered.iloc[0]
         session_memory.add(top["track_name"])
     else:
+        # Fallback logic
         genre = preferences.get("genre", "rock")
         tempo = preferences.get("tempo", "medium")
         mood = preferences.get("mood", "calm")
@@ -95,7 +120,7 @@ def recommend_engine(preferences: dict, session_memory=None):
             return None
         top = random.choice(fallback_list)
 
-    # Get Spotify preview data
+    # Spotify preview
     preview = search_spotify_preview(top.get("track_name", ""), top.get("track_artist", ""))
 
     return {
@@ -106,5 +131,5 @@ def recommend_engine(preferences: dict, session_memory=None):
         "tempo": top.get("tempo", "Unknown"),
         "spotify_url": preview.get("spotify_url"),
         "preview_url": preview.get("preview_url"),
-        "note": preferences.get("note", "No additional context provided.")
+        "note": preferences.get("note", None)
     }

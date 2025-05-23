@@ -96,10 +96,19 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
         "Content-Type": "application/json"
     }
 
+    # Add a friendly disclaimer if the note indicates we had to guess
+    note = song_dict.get("note")
+    intro = f"{note}\n" if note else ""
+
     prompt = custom_prompt or f"""
-The user likes {preferences.get('genre', 'some genre')} music, is feeling {preferences.get('mood', 'some mood')}, and prefers {preferences.get('tempo', 'any')} tempo.
-Suggest a song that fits: "{song_dict['song']}" by {song_dict['artist']} ({song_dict['genre']}, {song_dict['tempo']} tempo).
-Respond in a casual, friendly tone and say why it's a good fit in 1–2 sentences.
+{intro}
+The user is looking for a recommendation. Their preferences:
+- Genre: {preferences.get('genre', 'any')}
+- Mood: {preferences.get('mood', 'any')}
+- Tempo: {preferences.get('tempo', 'any')}
+
+Suggest a song that fits: "{song_dict['song']}" by {song_dict['artist']}".
+Explain casually in 1–2 sentences why this song works well based on their vibe.
 """
 
     body = {
@@ -117,43 +126,7 @@ Respond in a casual, friendly tone and say why it's a good fit in 1–2 sentence
         return response.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print("Groq Chat Error:", e)
-        return f"Here's a great track: '{song_dict['song']}' by {song_dict['artist']}."
-
-def extract_preferences_from_message(message: str, api_key: str) -> dict:
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    prompt = f"""
-You are an AI that extracts music preferences from user input.
-Respond only in valid JSON with 4 keys: genre, mood, tempo, artist_or_song.
-If a value is not explicitly or implicitly stated, use null.
-
-Message: "{message}"
-"""
-
-    body = {
-        "model": "llama3-70b-8192",
-        "messages": [
-            {"role": "system", "content": "You extract music preferences from user messages in JSON."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.3,
-        "max_tokens": 250
-    }
-
-    try:
-        response = requests.post(GROQ_API_URL, headers=headers, json=body)
-        text = response.json()["choices"][0]["message"]["content"]
-        parsed = json.loads(text[text.index("{"):text.rindex("}")+1])
-        for key in ["genre", "mood", "tempo", "artist_or_song"]:
-            if key not in parsed:
-                parsed[key] = None
-        return parsed
-    except Exception as e:
-        print("Groq Extraction Error:", e)
-        return {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
+        return f"Here's a great track: '{song_dict['song']}' by {song_dict['artist']}'. Let me know if you'd like more options!"
 
 def map_free_text_to_mood(text: str) -> str:
     text = text.lower()

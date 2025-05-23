@@ -1,105 +1,142 @@
 body {
-    font-family: 'Segoe UI', sans-serif;
-    background: #111;
-    color: #eee;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-  }
-  
-  .chat-container {
-    background: #1e1e1e;
-    padding: 20px;
-    border-radius: 10px;
-    width: 90%;
-    max-width: 600px;
-    box-shadow: 0 0 10px #000;
-  }
-  
-  h1 {
-    text-align: center;
-    color: #00ffcc;
-  }
-  
-  .chat-box {
-    height: 400px;
-    overflow-y: auto;
-    background: #d6d5d5;
-    padding: 10px;
-    border-radius: 5px;
-    margin-bottom: 10px;
-  }
-  
-  .chat-box p {
-    margin: 6px 0;
-    color: rgb(33, 103, 233);
-  }
-  
-  .input-container {
-    display: flex;
-  }
-  
-  input[type="text"] {
-    flex: 1;
-    padding: 10px;
-    border: none;
-    border-radius: 5px 0 0 5px;
-    font-size: 1em;
-  }
-  
-  button {
-    background: #00ffcc;
-    color: #000;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 0 5px 5px 0;
-    cursor: pointer;
-  }
-  
-  .spotify-preview {
-    background: #222;
-    padding: 10px;
-    border-radius: 5px;
-    margin-top: 10px;
-    text-align: center;
-  }
+  font-family: 'Segoe UI', sans-serif;
+  background: linear-gradient(145deg, #0f0f0f, #1a1a1a);
+  color: #eee;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
 
-  .spotify-preview img {
-    max-width: 100%;
-    border-radius: 5px;
-    margin-bottom: 10px;
-  }
+.chat-container {
+  background: #222;
+  padding: 24px;
+  border-radius: 16px;
+  width: 95%;
+  max-width: 700px;
+  box-shadow: 0 0 20px rgba(0, 255, 204, 0.2);
+  display: flex;
+  flex-direction: column;
+}
 
-  .spotify-preview a {
-    color: #00ffcc;
-    text-decoration: none;
-    font-weight: bold;
-  }
+h1 {
+  text-align: center;
+  color: #00ffcc;
+  margin-bottom: 16px;
+  font-size: 2rem;
+}
 
-  .spotify-preview audio {
-    margin-top: 10px;
-    width: 100%;
-  }
+.chat-box {
+  height: 400px;
+  overflow-y: auto;
+  background: #2a2a2a;
+  padding: 12px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  font-size: 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: #00ffcc #333;
+}
 
-  .options {
-    margin-top: 10px;
-  }
-  
-  .options button {
-    margin-right: 10px;
-    margin-top: 5px;
-    background: #444;
-    color: #eee;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 5px;
-    cursor: pointer;
-  }
-  
-  .green-response {
-  color: #26f185;
+.chat-box::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-box::-webkit-scrollbar-thumb {
+  background-color: #00ffcc;
+  border-radius: 10px;
+}
+
+.chat-box p {
+  margin: 8px 0;
+  color: #ccc;
+}
+
+.input-container {
+  display: flex;
+  gap: 0;
+  margin-top: 8px;
+}
+
+input[type="text"] {
+  flex: 1;
+  padding: 12px;
+  background: #333;
+  border: 1px solid #00ffcc;
+  border-radius: 8px 0 0 8px;
+  font-size: 1em;
+  color: #eee;
+  outline: none;
+}
+
+button {
+  background: #00ffcc;
+  color: #000;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 0 8px 8px 0;
   font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+button:hover {
+  background: #00d6ae;
+}
+
+.spotify-preview {
+  background: #1d1d1d;
+  padding: 12px;
+  border-radius: 10px;
+  margin-top: 12px;
+  text-align: center;
+  border: 1px solid #00ffcc33;
+}
+
+.spotify-preview img {
+  max-width: 100%;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+
+.spotify-preview a {
+  color: #00ffcc;
+  text-decoration: none;
+  font-weight: bold;
+  display: inline-block;
+  margin-top: 8px;
+}
+
+.spotify-preview audio {
+  margin-top: 8px;
+  width: 100%;
+  outline: none;
+  border-radius: 5px;
+}
+
+.options {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.options button {
+  margin-right: 10px;
+  margin-top: 6px;
+  background: #333;
+  color: #00ffcc;
+  border: 1px solid #00ffcc55;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.options button:hover {
+  background: #00ffcc;
+  color: #000;
+}
+
+.green-response {
+  color: #26f185;
+  font-weight: 500;
 }

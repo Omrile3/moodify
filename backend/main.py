@@ -47,20 +47,20 @@ def recommend(preference: PreferenceInput):
 
     greetings = ["hello", "hi", "start", "hey", "who are you", "what can you do"]
     if user_message.strip().lower() in greetings:
-       return {
-    "response": (
-        "<span style='color:green'>Hey! I'm <strong>Moodify</strong> 🎧 — your AI-powered music buddy.<br>"
-        "To get started, tell me one or more of the following:<br>"
-        "• 🎵 Your favorite artist or band<br>"
-        "• 🎧 The kind of music or genre you like<br>"
-        "• 😊 How you're feeling or your current mood<br>"
-        "Let’s find your perfect song!</span>"
-    )
-}
+        return {
+            "response": (
+                "<span style='color:green'>Hey! I'm <strong>Moodify</strong> 🎧 — your AI-powered music buddy.<br>"
+                "To get started, tell me one or more of the following:<br>"
+                "• 🎵 Your favorite artist or band<br>"
+                "• 🎧 The kind of music or genre you like<br>"
+                "• 😊 How you're feeling or your current mood<br>"
+                "Let’s find your perfect song!</span>"
+            )
+        }
 
-
+    # Extract preferences using Groq
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
-    
+
     if not extracted or not any(extracted.values()):
         clarification_prompt = f"""
         The user said: "{user_message}"
@@ -74,23 +74,27 @@ def recommend(preference: PreferenceInput):
         )
         return {"response": f"🟢 <span style='color:green'>{clarification}</span>"}
 
+    # Update session state with extracted values
     session = memory.get_session(preference.session_id)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         val = extracted.get(key)
         if val:
             memory.update_session(preference.session_id, key, val)
 
+    # Merge direct user inputs too
     prefs = memory.get_session(preference.session_id)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if preference.dict().get(key):
             prefs[key] = preference.dict()[key]
 
+    # Run recommender engine
     song = recommend_engine(prefs, prefs.get("history"))
 
+    # Ask more if still not enough data
     if not song or song['song'] == "N/A":
         clarification_prompt = f"""
-        The user previously asked: "{user_message}".
-        We couldn’t find a perfect match yet. Ask them to clarify — maybe suggest giving a favorite genre, artist, or mood.
+        The user said: "{user_message}".
+        Still missing enough info. Ask politely what genre, artist, or mood they like to help refine the match.
         """
         clarification = generate_chat_response(
             {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
@@ -100,10 +104,14 @@ def recommend(preference: PreferenceInput):
         )
         return {"response": f"🟢 <span style='color:green'>{clarification}</span>"}
 
+    # Track song in session history
     memory.add_to_history(preference.session_id, song["song"])
     gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
 
-    response_html = f"🟢 <span style='color:green'>{song.get('note', '')}<br>{gpt_message}</span>"
+    # Construct HTML response
+    note = f"{song['note']}<br>" if song.get("note") else ""
+    response_html = f"🟢 <span style='color:green'>{note}{gpt_message}</span>"
+
     if song.get("preview_url"):
         response_html += f"<br><audio controls src='{song['preview_url']}'></audio>"
     elif song.get("spotify_url"):
