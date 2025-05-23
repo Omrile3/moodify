@@ -154,6 +154,7 @@ Message: "{message}"
         for key in ["genre", "mood", "tempo", "artist_or_song"]:
             if key not in parsed:
                 parsed[key] = None
+        print(f"Extracted preferences: {parsed}")
         return parsed
     except Exception as e:
         print("Groq Extraction Error:", e)
