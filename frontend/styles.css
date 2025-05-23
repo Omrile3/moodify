@@ -27,7 +27,7 @@ body {
   .chat-box {
     height: 400px;
     overflow-y: auto;
-    background: #484747;
+    background: #d6d5d5;
     padding: 10px;
     border-radius: 5px;
     margin-bottom: 10px;
@@ -35,7 +35,7 @@ body {
   
   .chat-box p {
     margin: 6px 0;
-    color: cornflowerblue;
+    color: rgb(33, 103, 233);
   }
   
   .input-container {

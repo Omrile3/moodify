@@ -69,11 +69,11 @@ def fuzzy_match_artist_song(df, query: str):
     df['track_artist'] = df['track_artist'].fillna("").astype(str).str.lower()
     df['track_name'] = df['track_name'].fillna("").astype(str).str.lower()
 
-    exact_artist_matches = df[df['track_artist'].str.contains(query)]
+    exact_artist_matches = df[df['track_artist'].str.contains(query, case=False, na=False)]
     if not exact_artist_matches.empty:
         return exact_artist_matches
 
-    exact_song_matches = df[df['track_name'].str.contains(query)]
+    exact_song_matches = df[df['track_name'].str.contains(query, case=False, na=False)]
     if not exact_song_matches.empty:
         return exact_song_matches
 
@@ -86,7 +86,9 @@ def fuzzy_match_artist_song(df, query: str):
             ).flatten()
             return df.sort_values(by="similarity", ascending=False).head(5)
 
-    return df.nlargest(5, 'track_popularity') if 'track_popularity' in df.columns else df.head(5)
+    # Fallback: Return top songs by popularity or default to first 5 rows
+    fallback = df.nlargest(5, 'track_popularity') if 'track_popularity' in df.columns else df.head(5)
+    return fallback
 
 def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, custom_prompt: str = None) -> str:
     headers = {
