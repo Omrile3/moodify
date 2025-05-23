@@ -88,14 +88,17 @@ def recommend(preference: PreferenceInput):
     song = recommend_engine(prefs, prefs.get("history"))
 
     if not song or song["song"] == "N/A":
-        fallback_prompt = f"The user previously said: \"{user_message}\" but no clear match was found. Ask casually if they have a favorite artist, genre, or mood."
-        fallback_msg = generate_chat_response(
-            {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
-            prefs,
-            GROQ_API_KEY,
-            custom_prompt=fallback_prompt
-        )
-        return {"response": f"🟢 <span style='color:green'>{fallback_msg}</span>"}
+        if prefs.get("artist_or_song"):
+            fallback_msg = f"🟢 <span style='color:green'>I couldn’t find a match for '{prefs['artist_or_song']}'. Can you tell me more about your favorite genre or mood?</span>"
+        else:
+            fallback_prompt = f"The user previously said: \"{user_message}\" but no clear match was found. Ask casually if they have a favorite artist, genre, or mood."
+            fallback_msg = generate_chat_response(
+                {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
+                prefs,
+                GROQ_API_KEY,
+                custom_prompt=fallback_prompt
+            )
+        return {"response": fallback_msg}
 
     memory.add_to_history(preference.session_id, song["song"])
     gpt_msg = generate_chat_response(song, prefs, GROQ_API_KEY)
