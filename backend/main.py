@@ -58,60 +58,49 @@ def recommend(preference: PreferenceInput):
             )
         }
 
-    # Extract preferences using Groq
+    # 1. Extract preferences using Groq
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
 
-    if not extracted or not any(extracted.values()):
-        clarification_prompt = f"""
-        The user said: "{user_message}"
-        But didn’t provide enough details. Ask — in a casual way — what genre, artist, or vibe they want.
-        """
-        clarification = generate_chat_response(
-            {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
-            {"genre": None, "mood": None, "tempo": None},
-            GROQ_API_KEY,
-            custom_prompt=clarification_prompt
-        )
-        return {"response": f"🟢 <span style='color:green'>{clarification}</span>"}
-
-    # Update session state with extracted values
+    # 2. Store and update session memory
     session = memory.get_session(preference.session_id)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        val = extracted.get(key)
-        if val:
-            memory.update_session(preference.session_id, key, val)
+        user_val = preference.dict().get(key)
+        extracted_val = extracted.get(key)
+        if user_val:
+            memory.update_session(preference.session_id, key, user_val)
+        elif extracted_val:
+            memory.update_session(preference.session_id, key, extracted_val)
 
-    # Merge direct user inputs too
     prefs = memory.get_session(preference.session_id)
-    for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        if preference.dict().get(key):
-            prefs[key] = preference.dict()[key]
 
-    # Run recommender engine
-    song = recommend_engine(prefs, prefs.get("history"))
-
-    # Ask more if still not enough data
-    if not song or song['song'] == "N/A":
-        clarification_prompt = f"""
-        The user said: "{user_message}".
-        Still missing enough info. Ask politely what genre, artist, or mood they like to help refine the match.
-        """
-        clarification = generate_chat_response(
+    # 3. If not enough data, ask guiding question
+    if not prefs.get("artist_or_song") and not prefs.get("genre") and not prefs.get("mood"):
+        prompt = f"The user said: \"{user_message}\" but didn’t give a clear artist, mood, or genre. Ask what kind of vibe or music they want."
+        guidance = generate_chat_response(
             {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
             prefs,
             GROQ_API_KEY,
-            custom_prompt=clarification_prompt
+            custom_prompt=prompt
         )
-        return {"response": f"🟢 <span style='color:green'>{clarification}</span>"}
+        return {"response": f"🟢 <span style='color:green'>{guidance}</span>"}
 
-    # Track song in session history
+    # 4. Recommend a song using preferences
+    song = recommend_engine(prefs, prefs.get("history"))
+
+    if not song or song["song"] == "N/A":
+        fallback_prompt = f"The user previously said: \"{user_message}\" but no clear match was found. Ask casually if they have a favorite artist, genre, or mood."
+        fallback_msg = generate_chat_response(
+            {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
+            prefs,
+            GROQ_API_KEY,
+            custom_prompt=fallback_prompt
+        )
+        return {"response": f"🟢 <span style='color:green'>{fallback_msg}</span>"}
+
     memory.add_to_history(preference.session_id, song["song"])
-    gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
+    gpt_msg = generate_chat_response(song, prefs, GROQ_API_KEY)
 
-    # Construct HTML response
-    note = f"{song['note']}<br>" if song.get("note") else ""
-    response_html = f"🟢 <span style='color:green'>{note}{gpt_message}</span>"
-
+    response_html = f"🟢 <span style='color:green'>{song.get('note', '')}<br>{gpt_msg}</span>"
     if song.get("preview_url"):
         response_html += f"<br><audio controls src='{song['preview_url']}'></audio>"
     elif song.get("spotify_url"):
