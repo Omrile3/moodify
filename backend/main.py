@@ -58,58 +58,51 @@ def recommend(preference: PreferenceInput):
             )
         }
 
-    # Extract preferences from input and message
+    # Extract preferences using Groq
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
 
-    # Update memory with user-provided or extracted values
+    # Store and update session memory
     session = memory.get_session(preference.session_id)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        provided = preference.dict().get(key)
+        user_val = preference.dict().get(key)
         extracted_val = extracted.get(key)
-        if provided:
-            memory.update_session(preference.session_id, key, provided)
+        if user_val:
+            memory.update_session(preference.session_id, key, user_val)
         elif extracted_val:
             memory.update_session(preference.session_id, key, extracted_val)
 
     prefs = memory.get_session(preference.session_id)
 
-    # Not enough context
+    # Ask guiding question if not enough data
     if not prefs.get("artist_or_song") and not prefs.get("genre") and not prefs.get("mood"):
+        prompt = f"The user said: \"{user_message}\" but didn’t give a clear artist, mood, or genre. Ask what kind of vibe or music they want."
         guidance = generate_chat_response(
             {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
             prefs,
             GROQ_API_KEY,
-            custom_prompt=(
-                f"The user said: \"{user_message}\" but didn’t give a clear artist, mood, or genre. "
-                "Ask what kind of vibe or music they want."
-            )
+            custom_prompt=prompt
         )
         return {"response": f"🟢 <span style='color:green'>{guidance}</span>"}
 
-    # Try recommending a song
+    # Recommend a song using preferences
     song = recommend_engine(prefs, prefs.get("history"))
 
+    # Handle edge case with no song found
     if not song or song["song"] == "N/A":
+        if song and song.get("note", "").startswith("😕 I couldn’t find any songs by"):
+            return {"response": f"🟢 <span style='color:green'>{song['note']}</span>"}
         if prefs.get("artist_or_song"):
-            fallback_msg = (
-                f"🟢 <span style='color:green'>I couldn’t find a match for "
-                f"'{prefs['artist_or_song']}'. Can you tell me more about your favorite genre or mood?</span>"
-            )
+            fallback_msg = f"🟢 <span style='color:green'>I couldn’t find a match for '{prefs['artist_or_song']}'. Can you tell me more about your favorite genre or mood?</span>"
         else:
+            fallback_prompt = f"The user previously said: \"{user_message}\" but no clear match was found. Ask casually if they have a favorite artist, genre, or mood."
             fallback_msg = generate_chat_response(
                 {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
                 prefs,
                 GROQ_API_KEY,
-                custom_prompt=(
-                    f"The user previously said: \"{user_message}\" but no clear match was found. "
-                    "Ask casually if they have a favorite artist, genre, or mood."
-                )
+                custom_prompt=fallback_prompt
             )
-            fallback_msg = f"🟢 <span style='color:green'>{fallback_msg}</span>"
-
         return {"response": fallback_msg}
 
-    # Success
     memory.add_to_history(preference.session_id, song["song"])
     gpt_msg = generate_chat_response(song, prefs, GROQ_API_KEY)
 

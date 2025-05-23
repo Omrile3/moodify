@@ -35,7 +35,7 @@ MOOD_VECTORS = {
     "calm": [0.5, 0.4, 0.3, 0.7, 0.5]
 }
 
-# Precompute fallback map
+# Precompute recommendation map for fallback
 recommendation_map = precompute_recommendation_map(df)
 
 def recommend_engine(preferences: dict, session_memory=None):
@@ -45,13 +45,13 @@ def recommend_engine(preferences: dict, session_memory=None):
     filtered = df.copy()
     query = preferences.get("artist_or_song")
 
-    # Normalize mood if necessary
+    # Normalize mood
     if preferences.get("mood") and preferences["mood"] not in MOOD_VECTORS:
         preferences["mood"] = map_free_text_to_mood(preferences["mood"])
 
-    # Check for minimal context
-    missing = [k for k in ["artist_or_song", "genre", "mood", "tempo"] if not preferences.get(k)]
-    if len(missing) >= 3:
+    # Not enough input case
+    missing_keys = [k for k in ["artist_or_song", "genre", "mood", "tempo"] if not preferences.get(k)]
+    if len(missing_keys) >= 3:
         preferences["note"] = (
             "🎯 I need a bit more to recommend something great. "
             "Could you tell me one or more of the following: your mood, favorite artist, genre, or tempo?"
@@ -67,41 +67,48 @@ def recommend_engine(preferences: dict, session_memory=None):
             "note": preferences["note"]
         }
 
+    # Artist or song filtering
     if query:
-        raw_query = query
         query = query.lower().strip()
 
-        artist_matches = df[df["track_artist"].str.lower().str.contains(query, na=False)]
-        song_matches = df[df["track_name"].str.lower().str.contains(query, na=False)]
-
-        if not artist_matches.empty:
-            filtered = artist_matches
-            preferences["note"] = f"🎶 Here's a song by {raw_query.title()} you might enjoy."
-        elif not song_matches.empty:
-            filtered = song_matches
-            preferences["note"] = f"🎶 Here's a track that matches '{raw_query.title()}'."
+        # Exact artist match
+        exact_artist_matches = df[df["track_artist"].str.lower() == query]
+        if not exact_artist_matches.empty:
+            filtered = exact_artist_matches
+            preferences["note"] = f"🎶 Here's a song by {query.title()} you might enjoy."
         else:
-            fuzzy = fuzzy_match_artist_song(df, query)
-            if not fuzzy.empty:
-                filtered = fuzzy
-                preferences["note"] = f"🔍 No exact match for '{raw_query}', but these are similar."
+            # Try fuzzy matching
+            fuzzy_matches = fuzzy_match_artist_song(df, query)
+            if not fuzzy_matches.empty:
+                filtered = fuzzy_matches
+                preferences["note"] = f"🔍 No exact match for '{query}', but these are similar."
             else:
-                preferences["note"] = f"⚠️ Couldn't find anything related to '{raw_query}'. Showing popular tracks."
-                filtered = df.copy()
+                # Hard fallback if artist clearly doesn't exist
+                preferences["note"] = f"😕 I couldn’t find any songs by '{query.title()}'. Try another artist or add a genre?"
+                return {
+                    "song": "N/A",
+                    "artist": "N/A",
+                    "genre": "N/A",
+                    "mood": preferences.get("mood", "Unknown"),
+                    "tempo": "N/A",
+                    "spotify_url": None,
+                    "preview_url": None,
+                    "note": preferences["note"]
+                }
 
-    # Apply genre filter
+    # Genre filter
     if preferences.get("genre"):
         genre = preferences["genre"].lower()
-        genre_filtered = filtered[filtered["playlist_genre"].str.lower() == genre]
+        genre_filtered = filtered[filtered['playlist_genre'].str.lower() == genre]
         if not genre_filtered.empty:
             filtered = genre_filtered
 
-    # Apply tempo filter
+    # Tempo filter
     if preferences.get("tempo"):
         min_bpm, max_bpm = convert_tempo_to_bpm(preferences["tempo"])
         filtered = filtered[(filtered["tempo"] >= min_bpm) & (filtered["tempo"] <= max_bpm)]
 
-    # Mood-based cosine similarity ranking
+    # Mood similarity
     if preferences.get("mood") in MOOD_VECTORS and not filtered.empty:
         mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
         similarities = cosine_similarity(mood_vec, filtered[features].values).flatten()
@@ -110,10 +117,10 @@ def recommend_engine(preferences: dict, session_memory=None):
     elif "track_popularity" in filtered.columns:
         filtered = filtered.sort_values(by="track_popularity", ascending=False)
 
-    # Filter out previously recommended
+    # Remove songs already recommended
     filtered = filtered[~filtered["track_name"].isin(session_memory)]
 
-    # Select top result or fallback
+    # Return top match
     if not filtered.empty:
         top = filtered.iloc[0]
         session_memory.add(top["track_name"])
@@ -128,7 +135,6 @@ def recommend_engine(preferences: dict, session_memory=None):
             return None
         top = random.choice(fallback_list)
 
-    # Fetch Spotify preview
     preview = search_spotify_preview(top.get("track_name", ""), top.get("track_artist", ""))
 
     return {
