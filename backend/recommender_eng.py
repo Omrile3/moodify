@@ -92,7 +92,9 @@ def recommend_engine(preferences: dict, session_memory=None):
     # Filter by genre
     if preferences.get("genre"):
         genre = preferences["genre"].lower()
-        filtered = filtered[filtered['playlist_genre'].str.lower() == genre] or filtered
+        genre_filtered = filtered[filtered['playlist_genre'].str.lower() == genre]
+        if not genre_filtered.empty:
+            filtered = genre_filtered
 
     print(f"After genre filtering: {filtered.shape}")
     # Filter by tempo
