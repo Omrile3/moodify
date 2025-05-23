@@ -75,7 +75,7 @@ def fuzzy_match_artist_song(df, query: str):
     if not exact_song_matches.empty:
         return exact_song_matches
 
-    if "valence" in df.columns and "energy" in df.columns and "danceability" in df.columns:
+    if {"valence", "energy", "danceability"}.issubset(df.columns):
         target_song = df[df['track_name'] == query]
         if not target_song.empty:
             target_features = target_song[["valence", "energy", "danceability"]].iloc[0].values
@@ -84,8 +84,7 @@ def fuzzy_match_artist_song(df, query: str):
             ).flatten()
             return df.sort_values(by="similarity", ascending=False).head(5)
 
-    fallback = df.nlargest(5, 'track_popularity') if 'track_popularity' in df.columns else df.head(5)
-    return fallback
+    return df.nlargest(5, 'track_popularity') if 'track_popularity' in df.columns else df.head(5)
 
 def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, custom_prompt: str = None) -> str:
     headers = {
