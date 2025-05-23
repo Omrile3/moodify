@@ -129,8 +129,10 @@ If a value is not explicitly or implicitly stated, use null.
 
 Examples:
 - "I love Taylor Swift" → artist_or_song: "Taylor Swift"
+- "Play something by Ed Sheeran" → artist_or_song: "Ed Sheeran"
 - "I'm in a sad mood" → mood: "sad"
 - "Play fast pop music" → tempo: "fast", genre: "pop"
+- "Can you recommend a song by Adele?" → artist_or_song: "Adele"
 
 Message: "{message}"
 """
