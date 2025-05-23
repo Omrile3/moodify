@@ -1,4 +1,3 @@
-import difflib
 import os
 import base64
 import requests
@@ -7,7 +6,6 @@ import re
 import pandas as pd
 import numpy as np
 from functools import lru_cache
-from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -86,7 +84,6 @@ def fuzzy_match_artist_song(df, query: str):
             ).flatten()
             return df.sort_values(by="similarity", ascending=False).head(5)
 
-    # Fallback
     fallback = df.nlargest(5, 'track_popularity') if 'track_popularity' in df.columns else df.head(5)
     return fallback
 
@@ -129,6 +126,11 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
 You are an AI that extracts music preferences from user input.
 Respond only in valid JSON with 4 keys: genre, mood, tempo, artist_or_song.
 If a value is not explicitly or implicitly stated, use null.
+
+Examples:
+- "I love Taylor Swift" → artist_or_song: "Taylor Swift"
+- "I'm in a sad mood" → mood: "sad"
+- "Play fast pop music" → tempo: "fast", genre: "pop"
 
 Message: "{message}"
 """
