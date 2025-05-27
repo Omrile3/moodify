@@ -26,7 +26,7 @@ df = df.dropna(subset=features)
 scaler = MinMaxScaler()
 df[features] = scaler.fit_transform(df[features])
 
-# Mood vectors for cosine similarity
+# Mood vectors
 MOOD_VECTORS = {
     "happy": [0.9, 0.8, 0.7, 0.2, 0.6],
     "sad": [0.2, 0.3, 0.2, 0.6, 0.4],
@@ -34,7 +34,6 @@ MOOD_VECTORS = {
     "calm": [0.5, 0.4, 0.3, 0.7, 0.5]
 }
 
-# Build fallback recommenadation map
 recommendation_map = precompute_recommendation_map(df)
 
 def recommend_engine(preferences: dict):
@@ -68,24 +67,23 @@ def recommend_engine(preferences: dict):
 
     if preferences.get("mood") in MOOD_VECTORS:
         print("Applying mood vector similarity for mood:", preferences["mood"])
-        if filtered.empty:
-            print("Filtered DataFrame is empty. Skipping mood vector similarity.")
-        else:
+        if not filtered.empty:
             mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
             similarities = cosine_similarity(mood_vec, filtered[features].values).flatten()
             filtered["similarity"] = similarities
             filtered = filtered.sort_values(by="similarity", ascending=False)
-        similarities = cosine_similarity(mood_vec, filtered[features].values).flatten()
-        filtered["similarity"] = similarities
-        filtered = filtered.sort_values(by="similarity", ascending=False)
-    elif 'track_popularity' in filtered.columns:
-        filtered = filtered.sort_values(by='track_popularity', ascending=False)
-
-    print("After mood similarity filtering:", filtered.shape)
+        else:
+            print("Filtered DataFrame is empty. Skipping mood vector similarity.")
 
     if not filtered.empty:
-        print("Final filtered DataFrame size:", filtered.shape)
-        top = filtered.iloc[0]
+        last_song = preferences.get("last_song")
+        last_artist = preferences.get("last_artist")
+        for _, row in filtered.iterrows():
+            if row["track_name"] != last_song or row["track_artist"] != last_artist:
+                top = row
+                break
+        else:
+            top = filtered.iloc[0]
     else:
         genre = preferences.get("genre", "rock")
         tempo = preferences.get("tempo", "medium")

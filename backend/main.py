@@ -41,9 +41,7 @@ class CommandInput(BaseModel):
 def recommend(preference: PreferenceInput):
     user_message = preference.artist_or_song or ""
 
-    greetings = [
-        "hello", "hi", "start", "hey", "who are you", "what can you do", "hi!", "yo", "hello there"
-    ]
+    greetings = ["hello", "hi", "start", "hey", "who are you", "what can you do", "hi!", "yo", "hello there"]
     if user_message.strip().lower() in greetings:
         return {
             "response": (
@@ -53,9 +51,15 @@ def recommend(preference: PreferenceInput):
         }
 
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
+
+    # ✨ Inference patch: handle upbeat requests
+    if "more upbeat" in user_message.lower():
+        extracted["mood"] = "happy"
+        extracted["tempo"] = "fast"
+
     prefs = memory.get_session(preference.session_id)
 
-    # Fill missing fields from memory
+    # Fill missing extracted preferences from memory
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if not extracted.get(key) and prefs.get(key):
             extracted[key] = prefs.get(key)
@@ -88,9 +92,7 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
 
     memory.update_last_song(preference.session_id, song['song'], song['artist'])
     gpt_message = generate_chat_response(song, updated_prefs, GROQ_API_KEY)
-    return {
-        "response": f"🟢 <span style='color:green'>{gpt_message}</span>"
-    }
+    return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
 
 @app.post("/command")
 def handle_command(command_input: CommandInput):
