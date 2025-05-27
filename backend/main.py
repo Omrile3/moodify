@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 import os
@@ -19,7 +20,7 @@ memory = SessionMemory()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://moodify-frontend-cheh.onrender.com"],  # Restrict to frontend origin
+    allow_origins=["https://moodify-frontend-cheh.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,11 +52,15 @@ def recommend(preference: PreferenceInput):
             )
         }
 
-    # Extract intent from free-text
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
+    prefs = memory.get_session(preference.session_id)
 
-    # If extraction fails or all values are null
-    if not extracted or not any(extracted.values()):
+    # Fill missing fields from memory
+    for key in ["genre", "mood", "tempo", "artist_or_song"]:
+        if not extracted.get(key) and prefs.get(key):
+            extracted[key] = prefs.get(key)
+
+    if not any(extracted.values()):
         clarification_prompt = f"""
 The user said: "{user_message}"
 They want music, but didn’t provide a genre, mood, tempo, or artist.
@@ -69,24 +74,20 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
         )
         return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
 
-    # Update session memory
-    session = memory.get_session(preference.session_id)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        val = extracted.get(key)
-        if val:
-            memory.update_session(preference.session_id, key, val)
+        if extracted.get(key):
+            memory.update_session(preference.session_id, key, extracted[key])
 
-    prefs = memory.get_session(preference.session_id)
-    song = recommend_engine(prefs)
+    updated_prefs = memory.get_session(preference.session_id)
+    song = recommend_engine(updated_prefs)
 
-    # No match fallback
     if not song or song['song'] == "N/A":
         return {
             "response": "🟢 <span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
         }
 
-    gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
-
+    memory.update_last_song(preference.session_id, song['song'], song['artist'])
+    gpt_message = generate_chat_response(song, updated_prefs, GROQ_API_KEY)
     return {
         "response": f"🟢 <span style='color:green'>{gpt_message}</span>"
     }
@@ -99,11 +100,14 @@ def handle_command(command_input: CommandInput):
     if "another" in cmd:
         prefs = memory.get_session(session_id)
         song = recommend_engine(prefs)
+        if not song or song['song'] == "N/A":
+            return {"response": "🟢 <span style='color:green'>Hmm, couldn't find more. Try changing the artist, genre or mood?</span>"}
+        memory.update_last_song(session_id, song['song'], song['artist'])
         gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
         return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
 
     elif "change" in cmd:
-        for key in ["genre", "mood", "tempo"]:
+        for key in ["genre", "mood", "tempo", "artist_or_song"]:
             if key in cmd:
                 memory.update_session(session_id, key, None)
                 return {"response": f"🟢 <span style='color:green'>What {key} would you like now?</span>"}
@@ -124,7 +128,7 @@ async def global_exception_handler(request, exc):
         content={"message": "An unexpected error occurred. Please try again later."},
     )
 
-@app.get("/test-cors")  # Test endpoint to verify CORS
+@app.get("/test-cors")
 def test_cors():
     return {"message": "CORS is working!"}
 
