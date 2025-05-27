@@ -122,6 +122,8 @@ def map_free_text_to_mood(text: str) -> str:
         return "calm"
     elif any(word in text for word in ["happy", "joy", "sunny", "fun", "good mood"]):
         return "happy"
+    elif any(word in text for word in ["angry", "mad", "rage", "furious", "pissed"]):
+        return "energetic"
     else:
         return "calm"
 

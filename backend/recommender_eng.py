@@ -37,54 +37,52 @@ MOOD_VECTORS = {
 recommendation_map = precompute_recommendation_map(df)
 
 def recommend_engine(preferences: dict):
-    filtered = df.copy()
+    def apply_filters(preferences, filter_tempo=True, filter_genre=True):
+        local_df = df.copy()
+        print(f"⚙️ Filtering — Tempo: {filter_tempo}, Genre: {filter_genre}")
 
-    print("Initial DataFrame size:", filtered.shape)
+        if preferences.get("mood") and preferences["mood"] not in MOOD_VECTORS:
+            preferences["mood"] = map_free_text_to_mood(preferences["mood"])
 
-    if preferences.get("mood") and preferences["mood"] not in MOOD_VECTORS:
-        preferences["mood"] = map_free_text_to_mood(preferences["mood"])
+        if preferences.get("artist_or_song"):
+            print("🔍 Filtering by artist/song:", preferences["artist_or_song"])
+            local_df = fuzzy_match_artist_song(local_df, preferences["artist_or_song"])
 
-    print("After mood mapping:", filtered.shape)
+        if filter_genre and preferences.get("genre"):
+            print("🎧 Filtering by genre:", preferences["genre"])
+            local_df = local_df[local_df['playlist_genre'].str.lower() == preferences["genre"].lower()]
 
-    if preferences.get("artist_or_song"):
-        print("Filtering by artist or song:", preferences["artist_or_song"])
-        filtered = fuzzy_match_artist_song(filtered, preferences["artist_or_song"])
+        if filter_tempo and preferences.get("tempo"):
+            print("⏱️ Filtering by tempo:", preferences["tempo"])
+            bpm_range = convert_tempo_to_bpm(preferences["tempo"])
+            local_df = local_df[(local_df['tempo'] >= bpm_range[0]) & (local_df['tempo'] <= bpm_range[1])]
 
-    print("After artist/song filtering:", filtered.shape)
-
-    if preferences.get("genre"):
-        print("Filtering by genre:", preferences["genre"])
-        filtered = filtered[filtered['playlist_genre'].str.lower() == preferences["genre"].lower()]
-
-    print("After genre filtering:", filtered.shape)
-
-    if preferences.get("tempo"):
-        print("Filtering by tempo:", preferences["tempo"])
-        bpm_range = convert_tempo_to_bpm(preferences["tempo"])
-        filtered = filtered[(filtered['tempo'] >= bpm_range[0]) & (filtered['tempo'] <= bpm_range[1])]
-
-    print("After tempo filtering:", filtered.shape)
-
-    if preferences.get("mood") in MOOD_VECTORS:
-        print("Applying mood vector similarity for mood:", preferences["mood"])
-        if not filtered.empty:
+        if preferences.get("mood") in MOOD_VECTORS and not local_df.empty:
+            print("🧠 Applying mood vector similarity:", preferences["mood"])
             mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
-            similarities = cosine_similarity(mood_vec, filtered[features].values).flatten()
-            filtered["similarity"] = similarities
-            filtered = filtered.sort_values(by="similarity", ascending=False)
-        else:
-            print("Filtered DataFrame is empty. Skipping mood vector similarity.")
+            similarities = cosine_similarity(mood_vec, local_df[features].values).flatten()
+            local_df["similarity"] = similarities
+            local_df = local_df.sort_values(by="similarity", ascending=False)
 
-    if not filtered.empty:
-        last_song = preferences.get("last_song")
-        last_artist = preferences.get("last_artist")
-        for _, row in filtered.iterrows():
-            if row["track_name"] != last_song or row["track_artist"] != last_artist:
-                top = row
-                break
-        else:
-            top = filtered.iloc[0]
-    else:
+        return local_df
+
+    # Stage 1: strict
+    filtered = apply_filters(preferences, filter_tempo=True, filter_genre=True)
+    print("🎯 Strict filter result:", filtered.shape)
+
+    # Stage 2: relax tempo
+    if filtered.empty:
+        print("⚠️ No results — retrying without tempo...")
+        filtered = apply_filters(preferences, filter_tempo=False, filter_genre=True)
+
+    # Stage 3: relax genre + tempo
+    if filtered.empty:
+        print("⚠️ Still no results — retrying without tempo or genre...")
+        filtered = apply_filters(preferences, filter_tempo=False, filter_genre=False)
+
+    # Stage 4: final fallback
+    if filtered.empty:
+        print("🚨 All filtering failed — fallback mode engaged.")
         genre = preferences.get("genre", "rock")
         tempo = preferences.get("tempo", "medium")
         mood = preferences.get("mood", "calm")
@@ -94,6 +92,16 @@ def recommend_engine(preferences: dict):
         if not fallback_list:
             return None
         top = random.choice(fallback_list)
+    else:
+        last_song = preferences.get("last_song")
+        last_artist = preferences.get("last_artist")
+        top = None
+        for _, row in filtered.iterrows():
+            if row["track_name"] != last_song or row["track_artist"] != last_artist:
+                top = row
+                break
+        if top is None:
+            top = filtered.iloc[0]
 
     return {
         "song": top.get("track_name", "Unknown"),
