@@ -52,7 +52,7 @@ def recommend(preference: PreferenceInput):
 
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
 
-    # ✨ Inference patch: handle upbeat requests
+    # ✨ Optional inference patch
     if "more upbeat" in user_message.lower():
         extracted["mood"] = "happy"
         extracted["tempo"] = "fast"
@@ -78,8 +78,9 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
         )
         return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
 
+    # Update session memory with newly extracted values
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        if extracted.get(key):
+        if extracted.get(key):  # replaces prior value automatically
             memory.update_session(preference.session_id, key, extracted[key])
 
     updated_prefs = memory.get_session(preference.session_id)
@@ -115,6 +116,17 @@ def handle_command(command_input: CommandInput):
                 return {"response": f"🟢 <span style='color:green'>What {key} would you like now?</span>"}
 
     return {"response": "🟢 <span style='color:green'>Try something like 'another one' or 'change vibe'.</span>"}
+
+@app.post("/reset")
+def reset_session(command_input: CommandInput):
+    session_id = command_input.session_id
+    memory.reset_session(session_id)
+    return {
+        "response": (
+            "🟢 <span style='color:green'>Preferences reset! I'm <strong>Moodify</strong> 🎧 — "
+            "tell me how you feel, your favorite artist, or the kind of music you want.</span>"
+        )
+    }
 
 @app.get("/session/{session_id}")
 def get_session(session_id: str):
