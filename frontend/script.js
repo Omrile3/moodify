@@ -1,6 +1,12 @@
 const backendUrl = "https://moodify-backend-uj8d.onrender.com"; // Update this if testing locally or on a different deployment
 
-// Improved error handling
+const sessionId = generateSessionId();
+
+function generateSessionId() {
+  return 'sess-' + Math.random().toString(36).substring(2, 10);
+}
+
+// Send message from user
 window.sendMessage = function() {
   const inputField = document.getElementById("user-input");
   const message = inputField.value.trim();
@@ -27,9 +33,26 @@ window.sendMessage = function() {
     console.error("API error:", error);
     appendBotMessage("⚠️ Sorry, something went wrong while contacting Moodify.");
   });
-}
+};
 
-// Initial greeting on page load
+// Reset preferences (but not chat history)
+window.resetSession = function() {
+  fetch(`${backendUrl}/reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, command: "reset" })
+  })
+  .then(res => res.json())
+  .then(data => {
+    appendBotMessage(data.response || "Preferences have been reset.");
+  })
+  .catch(error => {
+    console.error("API error:", error);
+    appendBotMessage("⚠️ Couldn't reset Moodify session.");
+  });
+};
+
+// Load greeting on page load
 window.onload = () => {
   fetch(`${backendUrl}/recommend`, {
     method: "POST",
@@ -44,12 +67,7 @@ window.onload = () => {
   });
 };
 
-const sessionId = generateSessionId();
-
-function generateSessionId() {
-  return 'sess-' + Math.random().toString(36).substring(2, 10);
-}
-
+// Handle Enter key
 document.getElementById("user-input").addEventListener("keypress", function(event) {
   if (event.key === "Enter") {
     event.preventDefault();
@@ -57,6 +75,7 @@ document.getElementById("user-input").addEventListener("keypress", function(even
   }
 });
 
+// Append chat lines
 function appendUserMessage(msg) {
   const chatBox = document.getElementById("chat-box");
   chatBox.innerHTML += `<p><strong>You:</strong> ${msg}</p>`;
