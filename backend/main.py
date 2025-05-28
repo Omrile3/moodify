@@ -45,9 +45,13 @@ def recommend(preference: PreferenceInput):
     if user_message.strip().lower() in greetings:
         return {
             "response": (
-                "🟢 <span style='color:green'>Hey! I'm <strong>Moodify</strong> 🎧 — your Groq-powered music buddy. "
-                "Tell me how you feel, your favorite artist, or the kind of music you want.</span>"
-            )
+            "🟢 <span style='color:green'>Hey! I’m <strong>Moodify</strong> 🎧 — your AI-powered music buddy.<br>"
+            "Here’s how you can get started:<br><ul>"
+            "<li>🎵 Tell me how you’re feeling (e.g. happy, sad, chill)</li>"
+            "<li>🎤 Mention your favorite artist or band</li>"
+            "<li>🎧 Describe the kind of music you want to hear</li>"
+            "</ul>I’ll find the perfect song for your vibe!</span>"
+        )
         }
 
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
