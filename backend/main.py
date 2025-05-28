@@ -51,6 +51,7 @@ def recommend(preference: PreferenceInput):
         }
 
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
+    print("🎤 Extracted:", extracted)
 
     # ✨ Optional inference patch
     if "more upbeat" in user_message.lower():
@@ -59,10 +60,12 @@ def recommend(preference: PreferenceInput):
 
     prefs = memory.get_session(preference.session_id)
 
-    # Fill missing extracted preferences from memory
+    # Fill missing values from memory, except artist if current message mentions a new one
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        if not extracted.get(key) and prefs.get(key):
+        if not extracted.get(key):
             extracted[key] = prefs.get(key)
+        elif key == "artist_or_song" and extracted.get(key) != prefs.get(key):
+            print(f"🧠 New artist detected: {extracted.get(key)} (was: {prefs.get(key)})")
 
     if not any(extracted.values()):
         clarification_prompt = f"""
