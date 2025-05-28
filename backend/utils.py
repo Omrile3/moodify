@@ -20,7 +20,6 @@ def fuzzy_match_artist_song(df, query: str):
 
     query = query.lower()
     print(f"Performing fuzzy match for query: {query}")
-    # Ensure columns are strings and handle missing values
     df['track_artist'] = df['track_artist'].fillna("").astype(str).str.lower()
     df['track_name'] = df['track_name'].fillna("").astype(str).str.lower()
 
@@ -39,9 +38,18 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
         "Content-Type": "application/json"
     }
 
+    # Use fallbacks to avoid saying 'None' in the prompt
+    genre = preferences.get('genre') or "any"
+    mood = preferences.get('mood') or "any"
+    tempo = preferences.get('tempo') or "any"
+    song = song_dict.get('song', 'Unknown')
+    artist = song_dict.get('artist', 'Unknown')
+    song_genre = song_dict.get('genre', 'Unknown')
+    song_tempo = song_dict.get('tempo', 'Unknown')
+
     prompt = custom_prompt or f"""
-The user likes {preferences.get('genre', 'some genre')} music, is feeling {preferences.get('mood', 'some mood')}, and prefers {preferences.get('tempo', 'any')} tempo.
-Suggest a song that fits: "{song_dict['song']}" by {song_dict['artist']} ({song_dict['genre']}, {song_dict['tempo']} tempo).
+The user likes {genre} music, is feeling {mood}, and prefers {tempo} tempo.
+Suggest a song that fits: "{song}" by {artist} ({song_genre}, {song_tempo} tempo).
 Respond in a casual, friendly tone and say why it's a good fit in 1–2 sentences.
 """
 
@@ -60,7 +68,7 @@ Respond in a casual, friendly tone and say why it's a good fit in 1–2 sentence
         return response.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print("Groq Chat Error:", e)
-        return f"Here's a great track: '{song_dict['song']}' by {song_dict['artist']}."
+        return f"Here's a great track: '{song}' by {artist}."
 
 def extract_preferences_from_message(message: str, api_key: str) -> dict:
     headers = {
