@@ -37,7 +37,7 @@ MOOD_VECTORS = {
 recommendation_map = precompute_recommendation_map(df)
 
 def recommend_engine(preferences: dict):
-    def apply_filters(preferences, filter_tempo=True, filter_genre=True):
+    def apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=None):
         local_df = df.copy()
         print(f"⚙️ Filtering — Tempo: {filter_tempo}, Genre: {filter_genre}")
 
@@ -64,21 +64,36 @@ def recommend_engine(preferences: dict):
             local_df["similarity"] = similarities
             local_df = local_df.sort_values(by="similarity", ascending=False)
 
+        if exclude_artist:
+            local_df = local_df[local_df["track_artist"].str.lower() != exclude_artist.lower()]
+            print(f"🚫 Excluding artist from recommendations: {exclude_artist}")
+
         return local_df
 
+    # Detect "similar to" intent
+    exclude_artist = None
+    if preferences.get("artist_or_song"):
+        lowered = preferences["artist_or_song"].lower()
+        if "similar to" in lowered or "like" in lowered:
+            for artist in df['track_artist'].dropna().unique():
+                if artist.lower() in lowered:
+                    exclude_artist = artist
+                    print(f"🎯 User requested similarity — will exclude: {exclude_artist}")
+                    break
+
     # Stage 1: strict
-    filtered = apply_filters(preferences, filter_tempo=True, filter_genre=True)
+    filtered = apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=exclude_artist)
     print("🎯 Strict filter result:", filtered.shape)
 
     # Stage 2: relax tempo
     if filtered.empty:
         print("⚠️ No results — retrying without tempo...")
-        filtered = apply_filters(preferences, filter_tempo=False, filter_genre=True)
+        filtered = apply_filters(preferences, filter_tempo=False, filter_genre=True, exclude_artist=exclude_artist)
 
     # Stage 3: relax genre + tempo
     if filtered.empty:
         print("⚠️ Still no results — retrying without tempo or genre...")
-        filtered = apply_filters(preferences, filter_tempo=False, filter_genre=False)
+        filtered = apply_filters(preferences, filter_tempo=False, filter_genre=False, exclude_artist=exclude_artist)
 
     # Stage 4: final fallback
     if filtered.empty:
