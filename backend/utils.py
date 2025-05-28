@@ -84,6 +84,20 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
         "Content-Type": "application/json"
     }
 
+    lowered = message.lower()
+    similarity_phrases = ["similar to", "like", "sounds like", "vibe like", "in the style of"]
+    for phrase in similarity_phrases:
+        if phrase in lowered:
+            match = re.search(rf"{phrase} ([\w\s]+)", lowered)
+            if match:
+                artist_or_song = match.group(1).strip()
+                return {
+                    "genre": None,
+                    "mood": map_free_text_to_mood(message),
+                    "tempo": None,
+                    "artist_or_song": artist_or_song  # this will trigger exclude logic in recommender
+                }
+
     prompt = f"""
 You are an AI that extracts music preferences from user input.
 Respond only in valid JSON with 4 keys: genre, mood, tempo, artist_or_song.
@@ -163,4 +177,3 @@ def precompute_recommendation_map(df: pd.DataFrame) -> dict:
             index_map[key] = []
         index_map[key].append(row)
     return index_map
-
