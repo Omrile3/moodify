@@ -73,11 +73,13 @@ def recommend_engine(preferences: dict):
     exclude_artist = None
     if preferences.get("artist_or_song"):
         lowered = preferences["artist_or_song"].lower()
-        if "similar to" in lowered or "like" in lowered:
+        # Detect similarity intent
+        if any(keyword in lowered for keyword in ["similar to", "like", "vibe like", "in the style of"]):
             for artist in df['track_artist'].dropna().unique():
                 if artist.lower() in lowered:
                     exclude_artist = artist
-                    print(f"🎯 User requested similarity — will exclude: {exclude_artist}")
+                    preferences["artist_or_song"] = artist  # guide by this artist
+                    print(f"🎯 Similarity request detected — using: {artist}, but excluding it in results.")
                     break
 
     filtered = apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=exclude_artist)
@@ -113,11 +115,19 @@ def recommend_engine(preferences: dict):
         if top is None:
             top = filtered.iloc[0]
 
-    return {
-    "song": top.get("track_name", "Unknown"),
-    "artist": top.get("track_artist", "Unknown"),
-    "genre": top.get("playlist_genre", "Unknown"),
-    "mood": preferences.get("mood", "Unknown"),
-    "tempo": top.get("tempo", "Unknown"),
-    "spotify_url": f"https://open.spotify.com/track/{top.get('track_id')}" if top.get("track_id") else None
-}
+    response = {
+        "song": top.get("track_name", "Unknown"),
+        "artist": top.get("track_artist", "Unknown"),
+        "genre": top.get("playlist_genre", "Unknown"),
+        "mood": preferences.get("mood", "Unknown"),
+        "tempo": top.get("tempo", "Unknown"),
+        "spotify_url": f"https://open.spotify.com/track/{top.get('track_id')}" if top.get("track_id") else None
+    }
+
+    if preferences.get("artist_or_song"):
+        requested = preferences["artist_or_song"].lower()
+        if top.get("track_artist", "").lower() != requested:
+            response["artist_not_found"] = True
+            response["requested_artist"] = requested
+
+    return response
