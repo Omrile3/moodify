@@ -50,9 +50,12 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
     spotify_url = song_dict.get('spotify_url')
 
     prompt = custom_prompt or f"""
-The user likes {genre} music, is feeling {mood}, and prefers {tempo} tempo.
-Suggest a song that fits: "{song}" by {artist} ({song_genre}, {song_tempo} tempo).
-Respond in a casual, friendly tone and say why it's a good fit in 1–2 sentences.
+The user asked for a song with the following preferences:
+Genre: {genre}, Mood: {mood}, Tempo: {tempo}.
+Suggest a song that fits these preferences: "{song}" by {artist} ({song_genre}, {song_tempo} tempo).
+
+Explain briefly in a friendly tone why it's a good fit.
+Do not recommend other songs or artists.
 """
 
     body = {
@@ -161,9 +164,3 @@ def precompute_recommendation_map(df: pd.DataFrame) -> dict:
         index_map[key].append(row)
     return index_map
 
-# Deprecated: not used anymore
-def get_spotify_token():
-    return None
-
-def search_spotify_url(song: str, artist: str) -> str:
-    return None  # Deprecated

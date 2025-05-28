@@ -53,14 +53,13 @@ def recommend(preference: PreferenceInput):
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
     print("🎤 Extracted:", extracted)
 
-    # ✨ Optional inference patch
     if "more upbeat" in user_message.lower():
         extracted["mood"] = "happy"
         extracted["tempo"] = "fast"
 
     prefs = memory.get_session(preference.session_id)
 
-    # Fill missing values from memory, except artist if current message mentions a new one
+    # Fill missing values from memory
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if not extracted.get(key):
             extracted[key] = prefs.get(key)
@@ -81,7 +80,6 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
         )
         return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
 
-    # Update session memory with newly extracted values
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if extracted.get(key):
             memory.update_session(preference.session_id, key, extracted[key])
@@ -98,8 +96,9 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
     gpt_message = generate_chat_response(song, updated_prefs, GROQ_API_KEY)
 
     if song.get("artist_not_found"):
+        requested = song["requested_artist"].title()
         response = (
-            f"🟠 <span style='color:orange'>I couldn’t find a song by <strong>{song['requested_artist'].title()}</strong>, "
+            f"🟠 <span style='color:orange'>I couldn’t find a song by <strong>{requested}</strong>, "
             f"but here’s something similar you might enjoy:</span><br>"
             f"<span style='color:green'>{gpt_message}</span>"
         )
