@@ -3,6 +3,8 @@ import requests
 import json
 import re
 import pandas as pd
+import base64
+import os
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
@@ -16,7 +18,7 @@ def convert_tempo_to_bpm(tempo_category: str) -> tuple:
 def fuzzy_match_artist_song(df, query: str):
     if not isinstance(query, str):
         print(f"Invalid query type: {type(query)}. Expected a string.")
-        return df.head(5)  # Return top 5 rows as a fallback
+        return df.head(5)
 
     query = query.lower()
     print(f"Performing fuzzy match for query: {query}")
@@ -38,7 +40,6 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
         "Content-Type": "application/json"
     }
 
-    # Use fallbacks to avoid saying 'None' in the prompt
     genre = preferences.get('genre') or "any"
     mood = preferences.get('mood') or "any"
     tempo = preferences.get('tempo') or "any"
@@ -46,6 +47,7 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
     artist = song_dict.get('artist', 'Unknown')
     song_genre = song_dict.get('genre', 'Unknown')
     song_tempo = song_dict.get('tempo', 'Unknown')
+    spotify_url = song_dict.get('spotify_url')
 
     prompt = custom_prompt or f"""
 The user likes {genre} music, is feeling {mood}, and prefers {tempo} tempo.
@@ -65,10 +67,13 @@ Respond in a casual, friendly tone and say why it's a good fit in 1–2 sentence
 
     try:
         response = requests.post(GROQ_API_URL, headers=headers, json=body)
-        return response.json()["choices"][0]["message"]["content"].strip()
+        message = response.json()["choices"][0]["message"]["content"].strip()
+        if spotify_url:
+            message += f' 🎵 <a href="{spotify_url}" target="_blank">Listen on Spotify</a>'
+        return message
     except Exception as e:
         print("Groq Chat Error:", e)
-        return f"Here's a great track: '{song}' by {artist}."
+        return f"Here's a great track: '{song}' by {artist}." + (f' 🎵 <a href="{spotify_url}" target="_blank">Listen</a>' if spotify_url else "")
 
 def extract_preferences_from_message(message: str, api_key: str) -> dict:
     headers = {
@@ -155,47 +160,10 @@ def precompute_recommendation_map(df: pd.DataFrame) -> dict:
             index_map[key] = []
         index_map[key].append(row)
     return index_map
-import base64
-import os
 
+# Deprecated: not used anymore
 def get_spotify_token():
-    client_id = os.getenv("SPOTIFY_CLIENT_ID")
-    client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
-    if not client_id or not client_secret:
-        print("Missing Spotify credentials")
-        return None
-
-    auth_str = f"{client_id}:{client_secret}"
-    b64_auth_str = base64.b64encode(auth_str.encode()).decode()
-
-    headers = {
-        "Authorization": f"Basic {b64_auth_str}",
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-    data = {"grant_type": "client_credentials"}
-    try:
-        response = requests.post("https://accounts.spotify.com/api/token", headers=headers, data=data)
-        return response.json().get("access_token")
-    except Exception as e:
-        print("Spotify Token Error:", e)
-        return None
+    return None
 
 def search_spotify_url(song: str, artist: str) -> str:
-    token = get_spotify_token()
-    if not token:
-        return None
-
-    headers = {"Authorization": f"Bearer {token}"}
-    query = f"{song} {artist}"
-    try:
-        response = requests.get(
-            "https://api.spotify.com/v1/search",
-            headers=headers,
-            params={"q": query, "type": "track", "limit": 1}
-        )
-        items = response.json().get("tracks", {}).get("items", [])
-        if items:
-            return items[0]["external_urls"]["spotify"]
-    except Exception as e:
-        print("Spotify Search Error:", e)
-    return None
+    return None  # Deprecated
