@@ -114,11 +114,18 @@ def recommend_engine(preferences: dict):
         if top is None:
             top = filtered.iloc[0]
 
+    requested_artist = preferences.get("artist_or_song", "").lower()
+    actual_artist = top.get("track_artist", "").lower()
+    artist_not_found = requested_artist and requested_artist not in actual_artist
+
     return {
         "song": top.get("track_name", "Unknown"),
         "artist": top.get("track_artist", "Unknown"),
         "genre": top.get("playlist_genre", "Unknown"),
         "mood": preferences.get("mood", "Unknown"),
         "tempo": top.get("tempo", "Unknown"),
-        "spotify_url": search_spotify_url(top.get("track_name", ""), top.get("track_artist", ""))  # ✅ added
+        "spotify_url": search_spotify_url(top.get("track_name", ""), top.get("track_artist", "")),
+        "requested_artist": requested_artist,
+        "actual_artist": actual_artist,
+        "artist_not_found": artist_not_found
     }

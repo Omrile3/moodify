@@ -80,7 +80,7 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
 
     # Update session memory with newly extracted values
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        if extracted.get(key):  # replaces prior value automatically
+        if extracted.get(key):
             memory.update_session(preference.session_id, key, extracted[key])
 
     updated_prefs = memory.get_session(preference.session_id)
@@ -93,7 +93,17 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
 
     memory.update_last_song(preference.session_id, song['song'], song['artist'])
     gpt_message = generate_chat_response(song, updated_prefs, GROQ_API_KEY)
-    return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
+
+    if song.get("artist_not_found"):
+        response = (
+            f"🟠 <span style='color:orange'>I couldn’t find a song by <strong>{song['requested_artist'].title()}</strong>, "
+            f"but here’s something similar you might enjoy:</span><br>"
+            f"<span style='color:green'>{gpt_message}</span>"
+        )
+    else:
+        response = f"🟢 <span style='color:green'>{gpt_message}</span>"
+
+    return {"response": response}
 
 @app.post("/command")
 def handle_command(command_input: CommandInput):
