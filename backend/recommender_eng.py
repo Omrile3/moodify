@@ -11,7 +11,8 @@ from utils import (
     map_free_text_to_mood,
     split_mode_category,
     build_recommendation_key,
-    precompute_recommendation_map
+    precompute_recommendation_map,
+    search_spotify_url 
 )
 
 # Load and prepare dataset
@@ -70,7 +71,6 @@ def recommend_engine(preferences: dict):
 
         return local_df
 
-    # Detect "similar to" intent
     exclude_artist = None
     if preferences.get("artist_or_song"):
         lowered = preferences["artist_or_song"].lower()
@@ -81,21 +81,17 @@ def recommend_engine(preferences: dict):
                     print(f"🎯 User requested similarity — will exclude: {exclude_artist}")
                     break
 
-    # Stage 1: strict
     filtered = apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=exclude_artist)
     print("🎯 Strict filter result:", filtered.shape)
 
-    # Stage 2: relax tempo
     if filtered.empty:
         print("⚠️ No results — retrying without tempo...")
         filtered = apply_filters(preferences, filter_tempo=False, filter_genre=True, exclude_artist=exclude_artist)
 
-    # Stage 3: relax genre + tempo
     if filtered.empty:
         print("⚠️ Still no results — retrying without tempo or genre...")
         filtered = apply_filters(preferences, filter_tempo=False, filter_genre=False, exclude_artist=exclude_artist)
 
-    # Stage 4: final fallback
     if filtered.empty:
         print("🚨 All filtering failed — fallback mode engaged.")
         genre = preferences.get("genre", "rock")
@@ -123,5 +119,6 @@ def recommend_engine(preferences: dict):
         "artist": top.get("track_artist", "Unknown"),
         "genre": top.get("playlist_genre", "Unknown"),
         "mood": preferences.get("mood", "Unknown"),
-        "tempo": top.get("tempo", "Unknown")
+        "tempo": top.get("tempo", "Unknown"),
+        "spotify_url": search_spotify_url(top.get("track_name", ""), top.get("track_artist", ""))  # ✅ added
     }
