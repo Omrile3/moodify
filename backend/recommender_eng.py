@@ -5,6 +5,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MinMaxScaler
 from utils import (
     convert_tempo_to_bpm,
+    bpm_to_tempo_category,
     fuzzy_match_artist_song,
     generate_chat_response,
     extract_preferences_from_message,
@@ -17,6 +18,9 @@ from utils import (
 # Load and prepare dataset
 DATA_PATH = "data/songs.csv"
 df = pd.read_csv(DATA_PATH)
+
+# Save original tempo for reference
+df["tempo_raw"] = pd.to_numeric(df["tempo"], errors="coerce")
 
 # Normalize feature columns
 features = ['valence', 'energy', 'danceability', 'acousticness', 'tempo']
@@ -55,7 +59,7 @@ def recommend_engine(preferences: dict):
         if filter_tempo and preferences.get("tempo"):
             print("⏱️ Filtering by tempo:", preferences["tempo"])
             bpm_range = convert_tempo_to_bpm(preferences["tempo"])
-            local_df = local_df[(local_df['tempo'] >= bpm_range[0]) & (local_df['tempo'] <= bpm_range[1])]
+            local_df = local_df[(local_df['tempo_raw'] >= bpm_range[0]) & (local_df['tempo_raw'] <= bpm_range[1])]
 
         if preferences.get("mood") in MOOD_VECTORS and not local_df.empty:
             print("🧠 Applying mood vector similarity:", preferences["mood"])
@@ -70,13 +74,12 @@ def recommend_engine(preferences: dict):
 
         return local_df
 
-    # Detect similarity requests and handle artist exclusion
     exclude_artist = None
     if preferences.get("artist_or_song"):
         lowered = preferences["artist_or_song"].lower()
         similarity_request_keywords = [
             "similar to", "like", "vibe like", "in the style of",
-            "another artist like", "by a similar artist", "reminiscent of", "same vibe as","any artist"
+            "another artist like", "by a similar artist", "reminiscent of", "same vibe as", "any artist"
         ]
         if any(kw in lowered for kw in similarity_request_keywords):
             for artist in df['track_artist'].dropna().unique():
@@ -86,7 +89,6 @@ def recommend_engine(preferences: dict):
                     print(f"🎯 Similarity request detected — using: {artist}, but excluding it in results.")
                     break
 
-    # Begin recommendation pipeline
     filtered = apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=exclude_artist)
     print("🎯 Strict filter result:", filtered.shape)
 
@@ -119,12 +121,14 @@ def recommend_engine(preferences: dict):
         if top is None:
             top = filtered.iloc[0]
 
+    tempo_category = bpm_to_tempo_category(top.get("tempo_raw", 100))
+
     response = {
         "song": top.get("track_name", "Unknown"),
         "artist": top.get("track_artist", "Unknown"),
         "genre": top.get("playlist_genre", "Unknown"),
         "mood": preferences.get("mood", "Unknown"),
-        "tempo": top.get("tempo", "Unknown"),
+        "tempo": tempo_category,
         "spotify_url": f"https://open.spotify.com/track/{top.get('track_id')}" if top.get("track_id") else None
     }
 

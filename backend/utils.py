@@ -15,6 +15,15 @@ def convert_tempo_to_bpm(tempo_category: str) -> tuple:
         'fast': (121, 300)
     }.get(tempo_category.lower(), (0, 300))
 
+def bpm_to_tempo_category(bpm: float) -> str:
+    if bpm < 90:
+        return "slow"
+    elif bpm <= 120:
+        return "medium"
+    else:
+        return "fast"
+
+
 def fuzzy_match_artist_song(df, query: str):
     if not isinstance(query, str):
         print(f"Invalid query type: {type(query)}. Expected a string.")
