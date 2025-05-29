@@ -9,7 +9,7 @@ from typing import Optional
 
 from recommender_eng import recommend_engine
 from memory import SessionMemory
-from utils import generate_chat_response, extract_preferences_from_message
+from utils import generate_chat_response, extract_preferences_from_message, GENRES
 
 # Load Groq key
 load_dotenv()
@@ -61,19 +61,23 @@ def recommend(preference: PreferenceInput):
         extracted["mood"] = "happy"
         extracted["tempo"] = "fast"
 
+    # Genre override patch
+    for g in GENRES:
+        if g in user_message.lower() and not extracted.get("genre"):
+            extracted["genre"] = g
+            print(f"🎼 Genre override detected: {g}")
+
     prefs = memory.get_session(preference.session_id)
 
-    # 👀 Patch: detect "similar to X" intent
     lowered_msg = user_message.lower()
     if any(phrase in lowered_msg for phrase in ["similar to", "like", "vibe like", "sounds like", "in the style of"]):
         for artist in [prefs.get("artist_or_song"), extracted.get("artist_or_song")]:
             if artist:
                 extracted["artist_or_song"] = artist
-                extracted["exclude_artist"] = artist  # 🚫 will be excluded in recommender
+                extracted["exclude_artist"] = artist
                 print(f"🧠 Similarity mode — will exclude: {artist}")
                 break
 
-    # Fill missing preferences from memory
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if not extracted.get(key):
             extracted[key] = prefs.get(key)
@@ -98,11 +102,8 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
         if extracted.get(key):
             memory.update_session(preference.session_id, key, extracted[key])
 
-    # 👇 Patch: inject history + exclude
     updated_prefs = memory.get_session(preference.session_id)
-    updated_prefs["history"] = [
-        (updated_prefs.get("last_song"), updated_prefs.get("last_artist"))
-    ]
+    updated_prefs["history"] = [(updated_prefs.get("last_song"), updated_prefs.get("last_artist"))]
     if extracted.get("exclude_artist"):
         updated_prefs["artist_or_song"] = extracted["artist_or_song"]
         updated_prefs["exclude_artist"] = extracted["exclude_artist"]
