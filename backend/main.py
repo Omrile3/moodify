@@ -45,13 +45,13 @@ def recommend(preference: PreferenceInput):
     if user_message.strip().lower() in greetings:
         return {
             "response": (
-            "🟢 <span style='color:green'>Hey! I’m <strong>Moodify</strong> 🎧 — your AI-powered music buddy.<br>"
-            "Here’s how you can get started:<br><ul>"
-            "<li>🎵 Tell me how you’re feeling (e.g. happy, sad, chill)</li>"
-            "<li>🎤 Mention your favorite artist or band</li>"
-            "<li>🎧 Describe the kind of music you want to hear</li>"
-            "</ul>I’ll find the perfect song for your vibe!</span>"
-        )
+                "🟢 <span style='color:green'>Hey! I’m <strong>Moodify</strong> 🎧 — your AI-powered music buddy.<br>"
+                "Here’s how you can get started:<br><ul>"
+                "<li>🎵 Tell me how you’re feeling (e.g. happy, sad, chill)</li>"
+                "<li>🎤 Mention your favorite artist or band</li>"
+                "<li>🎧 Describe the kind of music you want to hear</li>"
+                "</ul>I’ll find the perfect song for your vibe!</span>"
+            )
         }
 
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
@@ -63,7 +63,17 @@ def recommend(preference: PreferenceInput):
 
     prefs = memory.get_session(preference.session_id)
 
-    # Fill missing values from memory
+    # 👀 Patch: detect "similar to X" intent
+    lowered_msg = user_message.lower()
+    if any(phrase in lowered_msg for phrase in ["similar to", "like", "vibe like", "sounds like", "in the style of"]):
+        for artist in [prefs.get("artist_or_song"), extracted.get("artist_or_song")]:
+            if artist:
+                extracted["artist_or_song"] = artist
+                extracted["exclude_artist"] = artist  # 🚫 will be excluded in recommender
+                print(f"🧠 Similarity mode — will exclude: {artist}")
+                break
+
+    # Fill missing preferences from memory
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if not extracted.get(key):
             extracted[key] = prefs.get(key)
@@ -88,7 +98,15 @@ Ask them — nicely and in a casual way — what kind of music or vibe they’re
         if extracted.get(key):
             memory.update_session(preference.session_id, key, extracted[key])
 
+    # 👇 Patch: inject history + exclude
     updated_prefs = memory.get_session(preference.session_id)
+    updated_prefs["history"] = [
+        (updated_prefs.get("last_song"), updated_prefs.get("last_artist"))
+    ]
+    if extracted.get("exclude_artist"):
+        updated_prefs["artist_or_song"] = extracted["artist_or_song"]
+        updated_prefs["exclude_artist"] = extracted["exclude_artist"]
+
     song = recommend_engine(updated_prefs)
 
     if not song or song['song'] == "N/A":
@@ -118,6 +136,7 @@ def handle_command(command_input: CommandInput):
 
     if "another" in cmd:
         prefs = memory.get_session(session_id)
+        prefs["history"] = [(prefs.get("last_song"), prefs.get("last_artist"))]
         song = recommend_engine(prefs)
         if not song or song['song'] == "N/A":
             return {"response": "🟢 <span style='color:green'>Hmm, couldn't find more. Try changing the artist, genre or mood?</span>"}
