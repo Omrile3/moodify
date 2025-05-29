@@ -73,12 +73,11 @@ def recommend_engine(preferences: dict):
     exclude_artist = None
     if preferences.get("artist_or_song"):
         lowered = preferences["artist_or_song"].lower()
-        # Detect similarity intent
         if any(keyword in lowered for keyword in ["similar to", "like", "vibe like", "in the style of"]):
             for artist in df['track_artist'].dropna().unique():
                 if artist.lower() in lowered:
                     exclude_artist = artist
-                    preferences["artist_or_song"] = artist  # guide by this artist
+                    preferences["artist_or_song"] = artist
                     print(f"🎯 Similarity request detected — using: {artist}, but excluding it in results.")
                     break
 
@@ -105,11 +104,10 @@ def recommend_engine(preferences: dict):
             return None
         top = random.choice(fallback_list)
     else:
-        last_song = preferences.get("last_song")
-        last_artist = preferences.get("last_artist")
+        history = preferences.get("history", [])
         top = None
         for _, row in filtered.iterrows():
-            if row["track_name"] != last_song or row["track_artist"] != last_artist:
+            if (row["track_name"], row["track_artist"]) not in history:
                 top = row
                 break
         if top is None:
