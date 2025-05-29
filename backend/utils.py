@@ -8,6 +8,11 @@ import os
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+GENRES = {
+    "pop", "rock", "classical", "jazz", "metal", "electronic", "hip hop", "rap",
+    "r&b", "lofi", "latin", "folk", "reggae", "country", "blues", "indie"
+}
+
 def convert_tempo_to_bpm(tempo_category: str) -> tuple:
     return {
         'slow': (0, 89),
@@ -22,7 +27,6 @@ def bpm_to_tempo_category(bpm: float) -> str:
         return "medium"
     else:
         return "fast"
-
 
 def fuzzy_match_artist_song(df, query: str):
     if not isinstance(query, str):
@@ -56,6 +60,11 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
     artist = song_dict.get('artist', 'Unknown')
     song_genre = song_dict.get('genre', 'Unknown')
     song_tempo = song_dict.get('tempo', 'Unknown')
+
+    # Convert tempo float to category if needed
+    if isinstance(song_tempo, (float, int)):
+        song_tempo = bpm_to_tempo_category(song_tempo)
+
     spotify_url = song_dict.get('spotify_url')
 
     prompt = custom_prompt or f"""
@@ -94,17 +103,24 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
     }
 
     lowered = message.lower()
-    similarity_phrases = ["similar to", "like", "sounds like", "vibe like", "in the style of", "reminiscent of", "same vibe as","any artist"]
+    similarity_phrases = ["similar to", "like", "sounds like", "vibe like", "in the style of", "reminiscent of", "same vibe as", "any artist"]
     for phrase in similarity_phrases:
         if phrase in lowered:
             match = re.search(rf"{phrase} ([\w\s]+)", lowered)
             if match:
-                artist_or_song = match.group(1).strip()
+                candidate = match.group(1).strip().lower()
+                if candidate in GENRES:
+                    return {
+                        "genre": candidate,
+                        "mood": map_free_text_to_mood(message),
+                        "tempo": None,
+                        "artist_or_song": None
+                    }
                 return {
                     "genre": None,
                     "mood": map_free_text_to_mood(message),
                     "tempo": None,
-                    "artist_or_song": artist_or_song
+                    "artist_or_song": candidate
                 }
 
     prompt = f"""
@@ -142,6 +158,12 @@ Input: "{message}"
         text = response.json()["choices"][0]["message"]["content"]
         text = text[text.index("{"):text.rindex("}")+1]
         parsed = json.loads(text)
+
+        # Defensive check
+        if parsed["artist_or_song"] and parsed["artist_or_song"].lower() in GENRES:
+            parsed["genre"] = parsed["artist_or_song"].lower()
+            parsed["artist_or_song"] = None
+
         for key in ["genre", "mood", "tempo", "artist_or_song"]:
             if key not in parsed:
                 parsed[key] = None
@@ -154,9 +176,9 @@ Input: "{message}"
 
 def map_free_text_to_mood(text: str) -> str:
     text = text.lower()
-    if any(word in text for word in ["cry", "sad", "lonely", "depressed", "rainy", "tears","tired", "exhausted"]):
+    if any(word in text for word in ["cry", "sad", "lonely", "depressed", "rainy", "tears", "tired", "exhausted"]):
         return "sad"
-    elif any(word in text for word in ["party", "hyped", "dance", "workout", "pump", "intense"," energetic", "upbeat"]):
+    elif any(word in text for word in ["party", "hyped", "dance", "workout", "pump", "intense", "energetic", "upbeat"]):
         return "energetic"
     elif any(word in text for word in ["chill", "calm", "relax", "study", "lofi", "smooth"]):
         return "calm"

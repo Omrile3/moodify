@@ -74,6 +74,7 @@ def recommend_engine(preferences: dict):
 
         return local_df
 
+    # Detect similarity intent
     exclude_artist = None
     if preferences.get("artist_or_song"):
         lowered = preferences["artist_or_song"].lower()
