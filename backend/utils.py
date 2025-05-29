@@ -67,12 +67,24 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
 
     spotify_url = song_dict.get('spotify_url')
 
+    # Determine if there's a mismatch
+    tempo_match = (tempo == song_tempo) if tempo != "any" else True
+    genre_match = (genre.lower() == song_genre.lower()) if genre != "any" else True
+    mood_match = (mood == song_dict.get("mood", "any")) if mood != "any" else True
+
+    if not (tempo_match and genre_match and mood_match):
+        explanation = f"""The recommended song may not perfectly match the user's preferences
+(Genre: {genre}, Mood: {mood}, Tempo: {tempo}), but it’s close in feel.
+Explain why it still might be a good emotional fit."""
+    else:
+        explanation = "Explain briefly in a friendly tone why it's a good fit."
+
     prompt = custom_prompt or f"""
 The user asked for a song with the following preferences:
 Genre: {genre}, Mood: {mood}, Tempo: {tempo}.
 Suggest a song that fits these preferences: "{song}" by {artist} ({song_genre}, {song_tempo} tempo).
 
-Explain briefly in a friendly tone why it's a good fit.
+{explanation}
 Do not recommend other songs or artists.
 """
 
