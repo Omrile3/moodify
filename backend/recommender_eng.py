@@ -70,10 +70,15 @@ def recommend_engine(preferences: dict):
 
         return local_df
 
+    # Detect similarity requests and handle artist exclusion
     exclude_artist = None
     if preferences.get("artist_or_song"):
         lowered = preferences["artist_or_song"].lower()
-        if any(keyword in lowered for keyword in ["similar to", "like", "vibe like", "in the style of"]):
+        similarity_request_keywords = [
+            "similar to", "like", "vibe like", "in the style of",
+            "another artist like", "by a similar artist", "reminiscent of", "same vibe as","any artist"
+        ]
+        if any(kw in lowered for kw in similarity_request_keywords):
             for artist in df['track_artist'].dropna().unique():
                 if artist.lower() in lowered:
                     exclude_artist = artist
@@ -81,6 +86,7 @@ def recommend_engine(preferences: dict):
                     print(f"🎯 Similarity request detected — using: {artist}, but excluding it in results.")
                     break
 
+    # Begin recommendation pipeline
     filtered = apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=exclude_artist)
     print("🎯 Strict filter result:", filtered.shape)
 

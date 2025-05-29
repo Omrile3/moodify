@@ -85,7 +85,7 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
     }
 
     lowered = message.lower()
-    similarity_phrases = ["similar to", "like", "sounds like", "vibe like", "in the style of"]
+    similarity_phrases = ["similar to", "like", "sounds like", "vibe like", "in the style of", "reminiscent of", "same vibe as","any artist"]
     for phrase in similarity_phrases:
         if phrase in lowered:
             match = re.search(rf"{phrase} ([\w\s]+)", lowered)
@@ -95,7 +95,7 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
                     "genre": None,
                     "mood": map_free_text_to_mood(message),
                     "tempo": None,
-                    "artist_or_song": artist_or_song  # this will trigger exclude logic in recommender
+                    "artist_or_song": artist_or_song
                 }
 
     prompt = f"""
@@ -131,7 +131,8 @@ Input: "{message}"
     try:
         response = requests.post(GROQ_API_URL, headers=headers, json=body)
         text = response.json()["choices"][0]["message"]["content"]
-        parsed = json.loads(text[text.index("{"):text.rindex("}")+1])
+        text = text[text.index("{"):text.rindex("}")+1]
+        parsed = json.loads(text)
         for key in ["genre", "mood", "tempo", "artist_or_song"]:
             if key not in parsed:
                 parsed[key] = None
@@ -144,9 +145,9 @@ Input: "{message}"
 
 def map_free_text_to_mood(text: str) -> str:
     text = text.lower()
-    if any(word in text for word in ["cry", "sad", "lonely", "depressed", "rainy", "tears"]):
+    if any(word in text for word in ["cry", "sad", "lonely", "depressed", "rainy", "tears","tired", "exhausted"]):
         return "sad"
-    elif any(word in text for word in ["party", "hyped", "dance", "workout", "pump", "intense"]):
+    elif any(word in text for word in ["party", "hyped", "dance", "workout", "pump", "intense"," energetic", "upbeat"]):
         return "energetic"
     elif any(word in text for word in ["chill", "calm", "relax", "study", "lofi", "smooth"]):
         return "calm"
