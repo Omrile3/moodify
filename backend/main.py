@@ -75,14 +75,14 @@ def recommend(preference: PreferenceInput):
             if artist:
                 extracted["artist_or_song"] = artist
                 extracted["exclude_artist"] = artist
-                print(f"🧠 Similarity mode — will exclude: {artist}")
+                print(f"Similarity mode — will exclude: {artist}")
                 break
 
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if not extracted.get(key):
             extracted[key] = prefs.get(key)
         elif key == "artist_or_song" and extracted.get(key) != prefs.get(key):
-            print(f"🧠 New artist detected: {extracted.get(key)} (was: {prefs.get(key)})")
+            print(f"New artist detected: {extracted.get(key)} (was: {prefs.get(key)})")
 
     if not any(extracted.values()):
         clarification_prompt = f"""

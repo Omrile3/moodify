@@ -11,7 +11,7 @@ class SessionMemory:
                 "artist_or_song": None,
                 "last_song": None,
                 "last_artist": None,
-                "history": []  # 🔥 NEW: track shown songs
+                "history": []  
             }
         return self.sessions[session_id]
 
@@ -26,7 +26,7 @@ class SessionMemory:
         self.sessions[session_id]["last_song"] = song
         self.sessions[session_id]["last_artist"] = artist
         if (song, artist) not in self.sessions[session_id]["history"]:
-            self.sessions[session_id]["history"].append((song, artist))  # 🔥 NEW
+            self.sessions[session_id]["history"].append((song, artist))  
 
     def reset_session(self, session_id: str):
         if session_id in self.sessions:
@@ -37,5 +37,5 @@ class SessionMemory:
                 "artist_or_song": None,
                 "last_song": None,
                 "last_artist": None,
-                "history": []  # 🔥 NEW
+                "history": []  
             }

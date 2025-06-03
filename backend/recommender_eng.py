@@ -43,26 +43,26 @@ recommendation_map = precompute_recommendation_map(df)
 def recommend_engine(preferences: dict):
     def apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=None):
         local_df = df.copy()
-        print(f"⚙️ Filtering — Tempo: {filter_tempo}, Genre: {filter_genre}")
+        print(f"Filtering — Tempo: {filter_tempo}, Genre: {filter_genre}")
 
         if preferences.get("mood") and preferences["mood"] not in MOOD_VECTORS:
             preferences["mood"] = map_free_text_to_mood(preferences["mood"])
 
         if preferences.get("artist_or_song"):
-            print("🔍 Filtering by artist/song:", preferences["artist_or_song"])
+            print("Filtering by artist/song:", preferences["artist_or_song"])
             local_df = fuzzy_match_artist_song(local_df, preferences["artist_or_song"])
 
         if filter_genre and preferences.get("genre"):
-            print("🎧 Filtering by genre:", preferences["genre"])
+            print("Filtering by genre:", preferences["genre"])
             local_df = local_df[local_df['playlist_genre'].str.lower() == preferences["genre"].lower()]
 
         if filter_tempo and preferences.get("tempo"):
-            print("⏱️ Filtering by tempo:", preferences["tempo"])
+            print("Filtering by tempo:", preferences["tempo"])
             bpm_range = convert_tempo_to_bpm(preferences["tempo"])
             local_df = local_df[(local_df['tempo_raw'] >= bpm_range[0]) & (local_df['tempo_raw'] <= bpm_range[1])]
 
         if preferences.get("mood") in MOOD_VECTORS and not local_df.empty:
-            print("🧠 Applying mood vector similarity:", preferences["mood"])
+            print("Applying mood vector similarity:", preferences["mood"])
             mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
             similarities = cosine_similarity(mood_vec, local_df[features].values).flatten()
             local_df["similarity"] = similarities
@@ -70,7 +70,7 @@ def recommend_engine(preferences: dict):
 
         if exclude_artist:
             local_df = local_df[local_df["track_artist"].str.lower() != exclude_artist.lower()]
-            print(f"🚫 Excluding artist from recommendations: {exclude_artist}")
+            print(f"Excluding artist from recommendations: {exclude_artist}")
 
         return local_df
 
@@ -87,22 +87,22 @@ def recommend_engine(preferences: dict):
                 if artist.lower() in lowered:
                     exclude_artist = artist
                     preferences["artist_or_song"] = artist
-                    print(f"🎯 Similarity request detected — using: {artist}, but excluding it in results.")
+                    print(f"Similarity request detected — using: {artist}, but excluding it in results.")
                     break
 
     filtered = apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=exclude_artist)
-    print("🎯 Strict filter result:", filtered.shape)
+    print("Strict filter result:", filtered.shape)
 
     if filtered.empty:
-        print("⚠️ No results — retrying without tempo...")
+        print("No results — retrying without tempo...")
         filtered = apply_filters(preferences, filter_tempo=False, filter_genre=True, exclude_artist=exclude_artist)
 
     if filtered.empty:
-        print("⚠️ Still no results — retrying without tempo or genre...")
+        print("Still no results — retrying without tempo or genre...")
         filtered = apply_filters(preferences, filter_tempo=False, filter_genre=False, exclude_artist=exclude_artist)
 
     if filtered.empty:
-        print("🚨 All filtering failed — fallback mode engaged.")
+        print("All filtering failed — fallback mode engaged.")
         genre = preferences.get("genre", "rock")
         tempo = preferences.get("tempo", "medium")
         mood = preferences.get("mood", "calm")

@@ -72,7 +72,7 @@ The user asked for a song with the following preferences:
 Genre: {genre}, Mood: {mood}, Tempo: {tempo}.
 Suggest a song that fits these preferences: "{song}" by {artist} ({song_genre}, {song_tempo} tempo).
 
-Explain briefly (2-3 sentences) in a friendly tone why it's a good fit.
+Explain briefly (2-3 sentences) in a friendly tone why it's a good fit. only mention the selected song in your reply,
 Do not recommend other songs or artists.
 """
 
