@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-import uvicorn
 import os
 from dotenv import load_dotenv
 from typing import Optional
@@ -56,7 +55,13 @@ def detect_keys_to_change(message: str):
 
 @app.post("/recommend")
 def recommend(preference: PreferenceInput):
-    user_message = preference.artist_or_song or ""
+    user_message = (
+        preference.artist_or_song
+        or preference.genre
+        or preference.mood
+        or preference.tempo
+        or ""
+    )
     session = memory.get_session(preference.session_id)
 
     greetings = ["hello", "hi", "start", "hey", "who are you", "what can you do", "hi!", "yo", "hello there"]
@@ -68,16 +73,6 @@ def recommend(preference: PreferenceInput):
             )
         }
 
-    if not session.get("pending_questions"):
-        extracted_temp = extract_preferences_from_message(user_message, GROQ_API_KEY)
-        if not is_music_related(user_message) and not any(extracted_temp.values()):
-            return {
-                "response": (
-                    "<span style='color:red'>Sorry, I can't help with that. Let's get back to your music vibe — "
-                    "what kind of mood or song are you into?</span>"
-                )
-            }
-
     # Handle follow-up questions if pending
     if "pending_questions" in session and session["pending_questions"]:
         current = session["pending_questions"].pop(0)
@@ -85,6 +80,12 @@ def recommend(preference: PreferenceInput):
         none_like = ["no", "none", "nah", "not really", "nothing"]
         value = None if normalized in none_like else user_message
         memory.update_session(preference.session_id, current, value)
+        # Try to extract more info from the answer, too
+        extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
+        for key in ["genre", "mood", "tempo", "artist_or_song"]:
+            if extracted.get(key):
+                memory.update_session(preference.session_id, key, extracted[key])
+        session = memory.get_session(preference.session_id)  # <-- re-fetch session here
         if session["pending_questions"]:
             next_q = session["pending_questions"][0]
             return {"response": question_for_key(next_q)}
@@ -92,6 +93,7 @@ def recommend(preference: PreferenceInput):
             # Resume with updated prefs
             return recommend(PreferenceInput(session_id=preference.session_id))
 
+    # Always try to extract preferences from the message
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if extracted.get(key):
@@ -99,12 +101,21 @@ def recommend(preference: PreferenceInput):
 
     session = memory.get_session(preference.session_id)
 
-    # Check for missing
+    # Check for missing preferences
     missing = [key for key in ["genre", "mood", "tempo", "artist_or_song"] if not session.get(key)]
     if missing:
         session["pending_questions"] = missing
         memory.update_session(preference.session_id, "pending_questions", missing)
         return {"response": question_for_key(missing[0])}
+
+    # If all preferences are missing and the message is not music-related, show fallback
+    if not is_music_related(user_message) and not any(extracted.values()):
+        return {
+            "response": (
+                "<span style='color:red'>Sorry, I can't help with that. Let's get back to your music vibe — "
+                "what kind of mood or song are you into?</span>"
+            )
+        }
 
     song = recommend_engine(session)
     if not song or song['song'] == "N/A":
@@ -119,10 +130,10 @@ def recommend(preference: PreferenceInput):
 
 def question_for_key(key: str) -> str:
     prompts = {
-        "genre": "🎶 <span style='color:green'>What genre do you usually enjoy?</span>",
-        "mood": "😊 <span style='color:green'>How are you feeling right now? (e.g., happy, sad, calm)</span>",
-        "tempo": "🎵 <span style='color:green'>Would you prefer a slow, medium, or fast-paced song?</span>",
-        "artist_or_song": "🎤 <span style='color:green'>Do you have a favorite artist?</span>"
+        "genre": "<span style='color:green'>What genre do you usually enjoy?</span>",
+        "mood": "<span style='color:green'>How are you feeling right now? (e.g., happy, sad, calm)</span>",
+        "tempo": "<span style='color:green'>Would you prefer a slow, medium, or fast-paced song?</span>",
+        "artist_or_song": "<span style='color:green'>Do you have a favorite artist?</span>"
     }
     return prompts.get(key, "Could you clarify that?")
 
@@ -187,4 +198,5 @@ def test_cors():
     return {"message": "CORS is working!"}
 
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", "10000")), reload=True)
