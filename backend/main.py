@@ -68,10 +68,10 @@ def recommend(preference: PreferenceInput):
             )
         }
 
-    if not is_music_related(user_message):
+    if not is_music_related(user_message) and not session.get("pending_questions"):
         return {
             "response": (
-                "🔴 <span style='color:red'>Sorry, I can't help with that. Let's get back to your music vibe — "
+                "<span style='color:red'>Sorry, I can't help with that. Let's get back to your music vibe — "
                 "what kind of mood or song are you into?</span>"
             )
         }
