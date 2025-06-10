@@ -13,6 +13,12 @@ GENRES = {
     "r&b", "lofi", "latin", "folk", "reggae", "country", "blues", "indie"
 }
 
+NONE_LIKE = {
+    "no", "none", "nah", "not really", "nothing", "any", "anything", "whatever",
+    "doesn't matter", "does not matter", "no preference", "up to you",
+    "anything is fine", "i don't care", "i don't mind", "doesn't matter to me", "no specific preference", "no prefernce"
+}
+
 def convert_tempo_to_bpm(tempo_category: str) -> tuple:
     return {
         'slow': (0, 89),
@@ -40,6 +46,7 @@ def fuzzy_match_artist_song(df, query: str):
 
     artist_matches = difflib.get_close_matches(query, df['track_artist'], n=5, cutoff=0.6)
     song_matches = difflib.get_close_matches(query, df['track_name'].str.lower(), n=5, cutoff=0.6)
+
     if artist_matches:
         return df[df['track_artist'].str.lower().isin(artist_matches)]
     elif song_matches:
@@ -82,13 +89,14 @@ Don't suggest alternatives or explain why. Mention only this one song.
 
     try:
         response = requests.post(GROQ_API_URL, headers=headers, json=body)
+        response.raise_for_status()
         message = response.json()["choices"][0]["message"]["content"].strip()
         if spotify_url:
             message += f' 🎵 <a href="{spotify_url}" target="_blank">Listen on Spotify</a>'
         return message
     except Exception as e:
         print("Groq Chat Error:", e)
-        return f"Here’s a great track: '{song}' by {artist}." + (f' 🎵 <a href="{spotify_url}" target="_blank">Listen</a>' if spotify_url else "")
+        return f"🎵 Here’s a great track: '{song}' by {artist}." + (f' <a href="{spotify_url}" target="_blank">Listen</a>' if spotify_url else "")
 
 def extract_preferences_from_message(message: str, api_key: str) -> dict:
     headers = {
@@ -145,18 +153,23 @@ Input: "{message}"
 
     try:
         response = requests.post(GROQ_API_URL, headers=headers, json=body)
+        response.raise_for_status()
         text = response.json()["choices"][0]["message"]["content"]
         text = text[text.index("{"):text.rindex("}")+1]
         parsed = json.loads(text)
 
+        # Treat invalid artist-like genres
         if parsed["artist_or_song"] and parsed["artist_or_song"].lower() in GENRES:
             parsed["genre"] = parsed["artist_or_song"].lower()
             parsed["artist_or_song"] = None
 
+        # Normalize any "none-like" phrases
         for key in ["genre", "mood", "tempo", "artist_or_song"]:
-            if key not in parsed:
+            if parsed.get(key) and parsed[key].strip().lower() in NONE_LIKE:
                 parsed[key] = None
-        return parsed
+
+        return {k: parsed.get(k, None) for k in ["genre", "mood", "tempo", "artist_or_song"]}
+
     except Exception as e:
         print("Groq Extraction Error:", e)
         return {

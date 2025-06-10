@@ -56,7 +56,6 @@ def detect_keys_to_change(message: str):
         keys.append("artist_or_song")
     return keys
 
-# After extracting/receiving tempo, normalize common typos
 def normalize_tempo(tempo):
     if not tempo:
         return tempo
@@ -94,15 +93,14 @@ def recommend(preference: PreferenceInput):
         current = session["pending_questions"].pop(0)
         normalized = user_message.strip().lower()
         none_like = [
-            "no", "none", "nah", "not really", "nothing",
-            "any", "anything", "whatever", "doesn't matter", "does not matter", "no preference", "up to you",
+            "no", "none", "nah", "not really", "nothing", "any", "anything", "whatever",
+            "doesn't matter", "does not matter", "no preference", "up to you",
             "anything is fine", "i don't care", "i don't mind", "doesn't matter to me", "no specific preference", "no prefernce"
         ]
-        value = None if any(phrase in normalized for phrase in none_like) else None
+        value = None if any(phrase in normalized for phrase in none_like) else normalized
         extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
         logging.info(f"[Extraction][PendingQ] User message: '{user_message}' | Extracted: {extracted}")
 
-        # Robust handling for artist_or_song: treat any "none-like" answer as None
         if current == "artist_or_song":
             if any(phrase in normalized for phrase in none_like):
                 value = None
@@ -110,6 +108,8 @@ def recommend(preference: PreferenceInput):
             elif extracted.get("artist_or_song") and any(phrase in extracted["artist_or_song"].lower() for phrase in none_like):
                 value = None
                 extracted["artist_or_song"] = None
+            else:
+                value = extracted.get("artist_or_song")
 
         memory.update_session(preference.session_id, current, value)
         for key in ["genre", "mood", "tempo", "artist_or_song"]:
@@ -121,14 +121,10 @@ def recommend(preference: PreferenceInput):
             next_q = session["pending_questions"].pop(0)
             memory.update_session(preference.session_id, "pending_questions", session["pending_questions"])
             return {"response": question_for_key(next_q)}
-        elif not session.get("pending_questions"):
-            memory.update_session(preference.session_id, "pending_questions", [])
         else:
-            # Clear pending questions and resume with updated prefs
             memory.update_session(preference.session_id, "pending_questions", [])
-            return recommend(PreferenceInput(session_id=preference.session_id))
 
-    # Always try to extract preferences from the message
+    # Extract preferences
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
     logging.info(f"[Extraction][Main] User message: '{user_message}' | Extracted: {extracted}")
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
@@ -137,29 +133,26 @@ def recommend(preference: PreferenceInput):
 
     session = memory.get_session(preference.session_id)
 
-    # Check for missing preferences
-    # Only ask for missing if the value is not present AND not explicitly set to None by the user
+    # Ask missing questions
     required_keys = ["genre", "mood", "tempo", "artist_or_song"]
     missing = [key for key in required_keys if key not in session or session[key] is None]
-    if missing or session.get("pending_questions"):
-        if not session.get("pending_questions"):
-            session["pending_questions"] = missing
-            memory.update_session(preference.session_id, "pending_questions", missing)
-        return {"response": question_for_key(session["pending_questions"][0])}
-    else:
-        # Recommend only after all questions are asked
-        song = recommend_engine(session)
-        if not song or song['song'] == "N/A":
-            return {
-                "response": "<span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
-            }
+    if missing:
+        session["pending_questions"] = missing
+        memory.update_session(preference.session_id, "pending_questions", missing)
+        return {"response": question_for_key(missing[0])}
 
-        memory.update_last_song(preference.session_id, song['song'], song['artist'])
-        gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
-        # Set awaiting_feedback flag
-        memory.update_session(preference.session_id, "awaiting_feedback", True)
+    # All info present — recommend
+    song = recommend_engine(session)
+    if not song or song['song'] == "N/A":
+        return {
+            "response": "<span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
+        }
 
-        return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
+    memory.update_last_song(preference.session_id, song['song'], song['artist'])
+    gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
+    memory.update_session(preference.session_id, "awaiting_feedback", True)
+
+    return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
 
 def question_for_key(key: str) -> str:
     prompts = {
@@ -176,6 +169,17 @@ def handle_command(command_input: CommandInput):
     session_id = command_input.session_id
     session = memory.get_session(session_id)
 
+    if "start over" in cmd or "restart" in cmd or "reset" in cmd:
+        memory.reset_session(session_id)
+        session = memory.get_session(session_id)
+        session["pending_questions"] = ["mood", "genre", "tempo", "artist_or_song"]
+        memory.update_session(session_id, "pending_questions", session["pending_questions"])
+        return {
+            "response": (
+                "🔁 <span style='color:green'>Alright! Let’s start fresh. How are you feeling right now?</span>"
+            )
+        }
+
     if "another" in cmd or "again" in cmd:
         session["history"] = [(session.get("last_song"), session.get("last_artist"))]
         song = recommend_engine(session)
@@ -187,24 +191,13 @@ def handle_command(command_input: CommandInput):
 
     elif "change" in cmd or "didn't like" in cmd or "no" in cmd:
         if session.get("awaiting_feedback"):
-            # Build a summary of user preferences for the message
-            prefs = []
-            if session.get("genre"):
-                prefs.append(session["genre"])
-            if session.get("mood"):
-                prefs.append(session["mood"])
-            if session.get("tempo"):
-                prefs.append(session["tempo"])
-            if session.get("artist_or_song"):
-                prefs.append(session["artist_or_song"])
-            prefs_str = ", ".join(str(p) for p in prefs if p)
-            # Reset the flag
+            prefs = [session.get(k) for k in ["genre", "mood", "tempo", "artist_or_song"] if session.get(k)]
+            prefs_str = ", ".join(prefs)
             memory.update_session(session_id, "awaiting_feedback", False)
             return {
                 "response": (
-                    f"😔 <span style='color:green'>I'm sorry that the song isn't quite right for you."
-                    f" I looked up a <b>{prefs_str}</b> song for you."
-                    " Would you like another one? Alternatively, you can say 'change genre', 'change mood', 'change artist', or 'reset' to update your preferences.</span>"
+                    f"😔 <span style='color:green'>I'm sorry that wasn't quite right. "
+                    f"I looked up a <b>{prefs_str}</b> song. Want another one?</span>"
                 )
             }
         else:
@@ -220,12 +213,10 @@ def handle_command(command_input: CommandInput):
         return {
             "response": (
                 "😊 <span style='color:green'>I'm glad you liked it! "
-                "If you want to discover more, you can say things like 'another one', 'change genre', or 'change artist'.<br>"
-                "You can also reset your preferences anytime by saying 'reset'.</span>"
+                "Say 'another one', 'change genre', or 'reset' anytime to explore more.</span>"
             )
         }
 
-    # Interpret direct reply to change
     keys = detect_keys_to_change(cmd)
     if keys:
         session["pending_questions"] = keys
@@ -238,6 +229,9 @@ def handle_command(command_input: CommandInput):
 def reset_session(command_input: CommandInput):
     session_id = command_input.session_id
     memory.reset_session(session_id)
+    session = memory.get_session(session_id)
+    session["pending_questions"] = ["mood", "genre", "tempo", "artist_or_song"]
+    memory.update_session(session_id, "pending_questions", session["pending_questions"])
     return {
         "response": (
             "🔄 <span style='color:green'>Preferences reset! Tell me how you’re feeling or what type of music you want to hear.</span>"

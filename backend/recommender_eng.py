@@ -101,6 +101,9 @@ def recommend_engine(preferences: dict):
         print("Still no results — retrying without tempo or genre...")
         filtered = apply_filters(preferences, filter_tempo=False, filter_genre=False, exclude_artist=exclude_artist)
 
+    history = preferences.get("history", [])
+    top = None
+
     if filtered.empty:
         print("All filtering failed — fallback mode engaged.")
         genre = preferences.get("genre", "rock")
@@ -109,23 +112,29 @@ def recommend_engine(preferences: dict):
         energy = "energetic"
         key = build_recommendation_key(genre, mood, energy, tempo)
         fallback_list = recommendation_map.get(key, [])
-        if not fallback_list:
+
+        non_repeats = [song for song in fallback_list if (song["track_name"], song["track_artist"]) not in history]
+        if non_repeats:
+            top = random.choice(non_repeats)
+            history.append((top["track_name"], top["track_artist"]))
+        elif fallback_list:
+            top = random.choice(fallback_list)
+            history.append((top["track_name"], top["track_artist"]))
+        else:
             return None
-        top = random.choice(fallback_list)
     else:
-        history = preferences.get("history", [])
-        top = None
         for _, row in filtered.iterrows():
             if (row["track_name"], row["track_artist"]) not in history:
                 top = row
                 history.append((row["track_name"], row["track_artist"]))
-                preferences["history"] = history
                 break
         if top is None:
             top = filtered.iloc[0]
+            history.append((top["track_name"], top["track_artist"]))
+
+    preferences["history"] = history
 
     tempo_category = bpm_to_tempo_category(top.get("tempo_raw", 100))
-
     response = {
         "song": top.get("track_name", "Unknown"),
         "artist": top.get("track_artist", "Unknown"),
