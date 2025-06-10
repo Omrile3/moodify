@@ -76,13 +76,15 @@ def recommend(preference: PreferenceInput):
                     "<span style='color:red'>Sorry, I can't help with that. Let's get back to your music vibe — "
                     "what kind of mood or song are you into?</span>"
                 )
-        }
+            }
 
     # Handle follow-up questions if pending
     if "pending_questions" in session and session["pending_questions"]:
         current = session["pending_questions"].pop(0)
-        session[current] = user_message
-        memory.update_session(preference.session_id, current, user_message)
+        normalized = user_message.strip().lower()
+        none_like = ["no", "none", "nah", "not really", "nothing"]
+        value = None if normalized in none_like else user_message
+        memory.update_session(preference.session_id, current, value)
         if session["pending_questions"]:
             next_q = session["pending_questions"][0]
             return {"response": question_for_key(next_q)}
