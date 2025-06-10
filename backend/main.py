@@ -101,13 +101,17 @@ def recommend(preference: PreferenceInput):
         value = None if any(phrase in normalized for phrase in none_like) else user_message
         extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
         logging.info(f"[Extraction][PendingQ] User message: '{user_message}' | Extracted: {extracted}")
-        if current == "artist_or_song" and not extracted.get("artist_or_song") and value:
-            memory.update_session(preference.session_id, current, value)
-        else:
-            memory.update_session(preference.session_id, current, value)
-            for key in ["genre", "mood", "tempo", "artist_or_song"]:
-                if extracted.get(key):
-                    memory.update_session(preference.session_id, key, extracted[key])
+
+        # Special handling: if user says "any artist" or similar, treat as None even if extractor returns 'any'
+        if current == "artist_or_song":
+            extracted_artist = extracted.get("artist_or_song")
+            if extracted_artist and any(phrase in extracted_artist.lower() for phrase in none_like):
+                extracted["artist_or_song"] = None
+
+        memory.update_session(preference.session_id, current, value)
+        for key in ["genre", "mood", "tempo", "artist_or_song"]:
+            if extracted.get(key):
+                memory.update_session(preference.session_id, key, extracted[key])
 
         session = memory.get_session(preference.session_id)
         if session["pending_questions"]:
