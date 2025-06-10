@@ -121,7 +121,8 @@ def recommend(preference: PreferenceInput):
             next_q = session["pending_questions"][0]
             return {"response": question_for_key(next_q)}
         else:
-            # Resume with updated prefs
+            # Clear pending questions and resume with updated prefs
+            memory.update_session(preference.session_id, "pending_questions", [])
             return recommend(PreferenceInput(session_id=preference.session_id))
 
     # Always try to extract preferences from the message
