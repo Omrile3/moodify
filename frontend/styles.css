@@ -150,3 +150,8 @@ button:hover {
     font-size: 0.95em;
   }
 }
+#typing-indicator {
+  font-style: italic;
+  color: #cccccc;
+  margin-top: 6px;
+}
