@@ -68,12 +68,14 @@ def recommend(preference: PreferenceInput):
             )
         }
 
-    if not is_music_related(user_message) and not session.get("pending_questions"):
-        return {
-            "response": (
-                "<span style='color:red'>Sorry, I can't help with that. Let's get back to your music vibe — "
-                "what kind of mood or song are you into?</span>"
-            )
+    if not session.get("pending_questions"):
+        extracted_temp = extract_preferences_from_message(user_message, GROQ_API_KEY)
+        if not is_music_related(user_message) and not any(extracted_temp.values()):
+            return {
+                "response": (
+                    "<span style='color:red'>Sorry, I can't help with that. Let's get back to your music vibe — "
+                    "what kind of mood or song are you into?</span>"
+                )
         }
 
     # Handle follow-up questions if pending
