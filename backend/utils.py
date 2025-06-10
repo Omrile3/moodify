@@ -60,30 +60,24 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
     artist = song_dict.get('artist', 'Unknown')
     song_genre = song_dict.get('genre', 'Unknown')
     song_tempo = song_dict.get('tempo', 'Unknown')
-
-    # Convert tempo float to category if needed
-    if isinstance(song_tempo, (float, int)):
-        song_tempo = bpm_to_tempo_category(song_tempo)
-
     spotify_url = song_dict.get('spotify_url')
 
     prompt = custom_prompt or f"""
-The user asked for a song with the following preferences:
+The user wants a song that matches these preferences:
 Genre: {genre}, Mood: {mood}, Tempo: {tempo}.
-Suggest a song that fits these preferences: "{song}" by {artist} ({song_genre}, {song_tempo} tempo).
-
-Explain briefly (2-3 sentences) in a friendly tone why it's a good fit. only mention the selected song in your reply,
-Do not recommend other songs or artists.
+Recommend only the selected song: "{song}" by {artist} ({song_genre}, {song_tempo} tempo).
+Reply in a warm and friendly tone. Your response must be short and concise — no more than 1.5 sentences.
+Don't suggest alternatives or explain why. Mention only this one song.
 """
 
     body = {
         "model": "llama3-70b-8192",
         "messages": [
-            {"role": "system", "content": "You are a helpful music recommendation assistant."},
+            {"role": "system", "content": "You are a helpful music assistant. Respond in under 1.5 sentences."},
             {"role": "user", "content": prompt}
         ],
-        "temperature": 0.7,
-        "max_tokens": 250
+        "temperature": 0.6,
+        "max_tokens": 200
     }
 
     try:
@@ -94,7 +88,7 @@ Do not recommend other songs or artists.
         return message
     except Exception as e:
         print("Groq Chat Error:", e)
-        return f"Here's a great track: '{song}' by {artist}." + (f' 🎵 <a href="{spotify_url}" target="_blank">Listen</a>' if spotify_url else "")
+        return f"Here’s a great track: '{song}' by {artist}." + (f' 🎵 <a href="{spotify_url}" target="_blank">Listen</a>' if spotify_url else "")
 
 def extract_preferences_from_message(message: str, api_key: str) -> dict:
     headers = {
@@ -136,10 +130,6 @@ Understand tone and emotion to classify mood:
 
 Also extract genre (pop, rock, classical, etc.), tempo (slow, medium, fast), or artist/song names.
 
-Example:
-Input: "Play something upbeat, I love Dua Lipa."
-Output: {{"genre": null, "mood": "happy", "tempo": "fast", "artist_or_song": "Dua Lipa"}}
-
 Input: "{message}"
 """
 
@@ -159,7 +149,6 @@ Input: "{message}"
         text = text[text.index("{"):text.rindex("}")+1]
         parsed = json.loads(text)
 
-        # Defensive check
         if parsed["artist_or_song"] and parsed["artist_or_song"].lower() in GENRES:
             parsed["genre"] = parsed["artist_or_song"].lower()
             parsed["artist_or_song"] = None

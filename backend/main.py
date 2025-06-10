@@ -37,121 +37,122 @@ class CommandInput(BaseModel):
     session_id: str
     command: str
 
+def is_music_related(text: str) -> bool:
+    keywords = ["music", "song", "artist", "genre", "playlist", "recommend", "mood", "tempo"]
+    return any(word in text.lower() for word in keywords)
+
+def detect_keys_to_change(message: str):
+    keys = []
+    message = message.lower()
+    if "genre" in message:
+        keys.append("genre")
+    if "mood" in message:
+        keys.append("mood")
+    if "tempo" in message:
+        keys.append("tempo")
+    if "artist" in message:
+        keys.append("artist_or_song")
+    return keys
+
 @app.post("/recommend")
 def recommend(preference: PreferenceInput):
     user_message = preference.artist_or_song or ""
+    session = memory.get_session(preference.session_id)
 
     greetings = ["hello", "hi", "start", "hey", "who are you", "what can you do", "hi!", "yo", "hello there"]
     if user_message.strip().lower() in greetings:
         return {
             "response": (
                 "🟢 <span style='color:green'>Hey! I’m <strong>Moodify</strong> 🎧 — your AI-powered music buddy.<br>"
-                "Here’s how you can get started:<br><ul>"
-                "<li>🎵 Tell me how you’re feeling (e.g. happy, sad, chill)</li>"
-                "<li>🎤 Mention your favorite artist or band</li>"
-                "<li>🎧 Describe the kind of music you want to hear</li>"
-                "</ul>I’ll find the perfect song for your vibe!</span>"
+                "Let’s find your perfect song! Tell me how you’re feeling or what kind of vibe you’re into.</span>"
             )
         }
 
+    if not is_music_related(user_message):
+        return {
+            "response": (
+                "🔴 <span style='color:red'>Sorry, I can't help with that. Let's get back to your music vibe — "
+                "what kind of mood or song are you into?</span>"
+            )
+        }
+
+    # Handle follow-up questions if pending
+    if "pending_questions" in session and session["pending_questions"]:
+        current = session["pending_questions"].pop(0)
+        session[current] = user_message
+        memory.update_session(preference.session_id, current, user_message)
+        if session["pending_questions"]:
+            next_q = session["pending_questions"][0]
+            return {"response": question_for_key(next_q)}
+        else:
+            # Resume with updated prefs
+            return recommend(PreferenceInput(session_id=preference.session_id))
+
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
-    print("🎤 Extracted:", extracted)
-
-    if "more upbeat" in user_message.lower():
-        extracted["mood"] = "happy"
-        extracted["tempo"] = "fast"
-
-    # Genre override patch
-    for g in GENRES:
-        if g in user_message.lower() and not extracted.get("genre"):
-            extracted["genre"] = g
-            print(f"🎼 Genre override detected: {g}")
-
-    prefs = memory.get_session(preference.session_id)
-
-    lowered_msg = user_message.lower()
-    if any(phrase in lowered_msg for phrase in ["similar to", "like", "vibe like", "sounds like", "in the style of"]):
-        for artist in [prefs.get("artist_or_song"), extracted.get("artist_or_song")]:
-            if artist:
-                extracted["artist_or_song"] = artist
-                extracted["exclude_artist"] = artist
-                print(f"Similarity mode — will exclude: {artist}")
-                break
-
-    for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        if not extracted.get(key):
-            extracted[key] = prefs.get(key)
-        elif key == "artist_or_song" and extracted.get(key) != prefs.get(key):
-            print(f"New artist detected: {extracted.get(key)} (was: {prefs.get(key)})")
-
-    if not any(extracted.values()):
-        clarification_prompt = f"""
-The user said: "{user_message}"
-They want music, but didn’t provide a genre, mood, tempo, or artist.
-Ask them — nicely and in a casual way — what kind of music or vibe they’re into.
-"""
-        gpt_message = generate_chat_response(
-            {"song": "N/A", "artist": "N/A", "genre": "N/A", "tempo": "N/A"},
-            {"genre": None, "mood": None, "tempo": None},
-            GROQ_API_KEY,
-            custom_prompt=clarification_prompt
-        )
-        return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
-
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if extracted.get(key):
             memory.update_session(preference.session_id, key, extracted[key])
 
-    updated_prefs = memory.get_session(preference.session_id)
-    updated_prefs["history"] = [(updated_prefs.get("last_song"), updated_prefs.get("last_artist"))]
-    if extracted.get("exclude_artist"):
-        updated_prefs["artist_or_song"] = extracted["artist_or_song"]
-        updated_prefs["exclude_artist"] = extracted["exclude_artist"]
+    session = memory.get_session(preference.session_id)
 
-    song = recommend_engine(updated_prefs)
+    # Check for missing
+    missing = [key for key in ["genre", "mood", "tempo", "artist_or_song"] if not session.get(key)]
+    if missing:
+        session["pending_questions"] = missing
+        memory.update_session(preference.session_id, "pending_questions", missing)
+        return {"response": question_for_key(missing[0])}
 
+    song = recommend_engine(session)
     if not song or song['song'] == "N/A":
         return {
             "response": "🟢 <span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
         }
 
     memory.update_last_song(preference.session_id, song['song'], song['artist'])
-    gpt_message = generate_chat_response(song, updated_prefs, GROQ_API_KEY)
+    gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
 
-    if song.get("artist_not_found"):
-        requested = song["requested_artist"].title()
-        response = (
-            f"🟠 <span style='color:orange'>I couldn’t find a song by <strong>{requested}</strong>, "
-            f"but here’s something similar you might enjoy:</span><br>"
-            f"<span style='color:green'>{gpt_message}</span>"
-        )
-    else:
-        response = f"🟢 <span style='color:green'>{gpt_message}</span>"
+    return {"response": f"🟢 <span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
 
-    return {"response": response}
+def question_for_key(key: str) -> str:
+    prompts = {
+        "genre": "🎶 <span style='color:green'>What genre do you usually enjoy?</span>",
+        "mood": "😊 <span style='color:green'>How are you feeling right now? (e.g., happy, sad, calm)</span>",
+        "tempo": "🎵 <span style='color:green'>Would you prefer a slow, medium, or fast-paced song?</span>",
+        "artist_or_song": "🎤 <span style='color:green'>Do you have a favorite artist?</span>"
+    }
+    return prompts.get(key, "Could you clarify that?")
 
 @app.post("/command")
 def handle_command(command_input: CommandInput):
     cmd = command_input.command.lower()
     session_id = command_input.session_id
+    session = memory.get_session(session_id)
 
-    if "another" in cmd:
-        prefs = memory.get_session(session_id)
-        prefs["history"] = [(prefs.get("last_song"), prefs.get("last_artist"))]
-        song = recommend_engine(prefs)
+    if "another" in cmd or "again" in cmd:
+        session["history"] = [(session.get("last_song"), session.get("last_artist"))]
+        song = recommend_engine(session)
         if not song or song['song'] == "N/A":
-            return {"response": "🟢 <span style='color:green'>Hmm, couldn't find more. Try changing the artist, genre or mood?</span>"}
+            return {"response": "🟢 <span style='color:green'>I couldn’t find another one. Want to change mood or artist?</span>"}
         memory.update_last_song(session_id, song['song'], song['artist'])
-        gpt_message = generate_chat_response(song, prefs, GROQ_API_KEY)
-        return {"response": f"🟢 <span style='color:green'>{gpt_message}</span>"}
+        gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
+        return {"response": f"🟢 <span style='color:green'>{gpt_message}</span><br>Did you like that one?"}
 
-    elif "change" in cmd:
-        for key in ["genre", "mood", "tempo", "artist_or_song"]:
-            if key in cmd:
-                memory.update_session(session_id, key, None)
-                return {"response": f"🟢 <span style='color:green'>What {key} would you like now?</span>"}
+    elif "change" in cmd or "didn't like" in cmd or "no" in cmd:
+        return {
+            "response": (
+                "🔁 <span style='color:green'>What would you like to change in your preferences? "
+                "(genre, mood, tempo, artist)</span>"
+            )
+        }
 
-    return {"response": "🟢 <span style='color:green'>Try something like 'another one' or 'change vibe'.</span>"}
+    # Interpret direct reply to change
+    keys = detect_keys_to_change(cmd)
+    if keys:
+        session["pending_questions"] = keys
+        memory.update_session(session_id, "pending_questions", keys)
+        return {"response": question_for_key(keys[0])}
+
+    return {"response": "🟢 <span style='color:green'>You can say 'another one' or 'change genre' to keep going.</span>"}
 
 @app.post("/reset")
 def reset_session(command_input: CommandInput):
@@ -159,8 +160,7 @@ def reset_session(command_input: CommandInput):
     memory.reset_session(session_id)
     return {
         "response": (
-            "🟢 <span style='color:green'>Preferences reset! I'm <strong>Moodify</strong> 🎧 — "
-            "tell me how you feel, your favorite artist, or the kind of music you want.</span>"
+            "🔄 <span style='color:green'>Preferences reset! Tell me how you’re feeling or what type of music you want to hear.</span>"
         )
     }
 
