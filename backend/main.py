@@ -128,7 +128,7 @@ def recommend(preference: PreferenceInput):
     # Check for missing preferences
     # Only ask for missing if the value is not present AND not explicitly set to None by the user
     required_keys = ["genre", "mood", "tempo", "artist_or_song"]
-    missing = [key for key in required_keys if key not in session]
+    missing = [key for key in required_keys if key not in session or session[key] is None]
     if missing:
         session["pending_questions"] = missing
         memory.update_session(preference.session_id, "pending_questions", missing)
