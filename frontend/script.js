@@ -94,3 +94,24 @@ function calculateTypingDelay(text) {
   const delayPerWord = 120; // ms
   return Math.min(3000, wordCount * delayPerWord);
 }
+
+window.resetSession = function () {
+  showTypingIndicator();
+  fetch(`${backendUrl}/reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId })
+  })
+    .then(res => res.json())
+    .then(data => {
+      hideTypingIndicator();
+      appendBotMessage(data.response || "Session reset.");
+      // Optionally clear chat box except for the greeting:
+      // document.getElementById("chat-box").innerHTML = "";
+    })
+    .catch(error => {
+      hideTypingIndicator();
+      appendBotMessage("⚠️ Sorry, something went wrong while resetting your session.");
+      console.error("Reset error:", error);
+    });
+};

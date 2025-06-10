@@ -95,7 +95,8 @@ def recommend(preference: PreferenceInput):
         normalized = user_message.strip().lower()
         none_like = [
             "no", "none", "nah", "not really", "nothing",
-            "any", "anything", "whatever", "doesn't matter", "does not matter", "no preference", "up to you","anything is fine", "i don't care", "i don't mind", "doesn't matter to me", "no specific preference","no prefernce"
+            "any", "anything", "whatever", "doesn't matter", "does not matter", "no preference", "up to you",
+            "anything is fine", "i don't care", "i don't mind", "doesn't matter to me", "no specific preference", "no prefernce"
         ]
         value = None if any(phrase in normalized for phrase in none_like) else user_message
         extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
@@ -128,7 +129,7 @@ def recommend(preference: PreferenceInput):
     # Check for missing preferences
     # Only ask for missing if the value is not present AND not explicitly set to None by the user
     required_keys = ["genre", "mood", "tempo", "artist_or_song"]
-    missing = [key for key in required_keys if key not in session or session[key] is None]
+    missing = [key for key in required_keys if key not in session]
     if missing:
         session["pending_questions"] = missing
         memory.update_session(preference.session_id, "pending_questions", missing)
@@ -191,7 +192,7 @@ def handle_command(command_input: CommandInput):
                 "response": (
                     f"😔 <span style='color:green'>I'm sorry that the song isn't quite right for you."
                     f" I looked up a <b>{prefs_str}</b> song for you."
-                    " Would you like another one? Alternatively, you can say 'no' and continue to change your preferences.</span>"
+                    " Would you like another one? Alternatively, you can say 'change genre', 'change mood', 'change artist', or 'reset' to update your preferences.</span>"
                 )
             }
         else:
