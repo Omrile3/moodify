@@ -98,7 +98,7 @@ def recommend(preference: PreferenceInput):
             "any", "anything", "whatever", "doesn't matter", "does not matter", "no preference", "up to you",
             "anything is fine", "i don't care", "i don't mind", "doesn't matter to me", "no specific preference", "no prefernce"
         ]
-        value = None if any(phrase in normalized for phrase in none_like) else normalized
+        value = None if any(phrase in normalized for phrase in none_like) else None
         extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
         logging.info(f"[Extraction][PendingQ] User message: '{user_message}' | Extracted: {extracted}")
 
@@ -108,8 +108,8 @@ def recommend(preference: PreferenceInput):
                 value = None
                 extracted["artist_or_song"] = None
             elif extracted.get("artist_or_song") and any(phrase in extracted["artist_or_song"].lower() for phrase in none_like):
-                value = "any"
-                extracted["artist_or_song"] = "any"
+                value = None
+                extracted["artist_or_song"] = None
 
         memory.update_session(preference.session_id, current, value)
         for key in ["genre", "mood", "tempo", "artist_or_song"]:
@@ -121,6 +121,8 @@ def recommend(preference: PreferenceInput):
             next_q = session["pending_questions"].pop(0)
             memory.update_session(preference.session_id, "pending_questions", session["pending_questions"])
             return {"response": question_for_key(next_q)}
+        elif not session.get("pending_questions"):
+            memory.update_session(preference.session_id, "pending_questions", [])
         else:
             # Clear pending questions and resume with updated prefs
             memory.update_session(preference.session_id, "pending_questions", [])
@@ -139,12 +141,13 @@ def recommend(preference: PreferenceInput):
     # Only ask for missing if the value is not present AND not explicitly set to None by the user
     required_keys = ["genre", "mood", "tempo", "artist_or_song"]
     missing = [key for key in required_keys if key not in session or session[key] is None]
-    if missing:
-        session["pending_questions"] = missing
-        memory.update_session(preference.session_id, "pending_questions", missing)
-        return {"response": question_for_key(missing[0])}
+    if missing or session.get("pending_questions"):
+        if not session.get("pending_questions"):
+            session["pending_questions"] = missing
+            memory.update_session(preference.session_id, "pending_questions", missing)
+        return {"response": question_for_key(session["pending_questions"][0])}
     else:
-        # recommend
+        # Recommend only after all questions are asked
         song = recommend_engine(session)
         if not song or song['song'] == "N/A":
             return {
