@@ -77,15 +77,22 @@ def recommend(preference: PreferenceInput):
     if "pending_questions" in session and session["pending_questions"]:
         current = session["pending_questions"].pop(0)
         normalized = user_message.strip().lower()
-        none_like = ["no", "none", "nah", "not really", "nothing"]
-        value = None if normalized in none_like else user_message
-        memory.update_session(preference.session_id, current, value)
-        # Try to extract more info from the answer, too
+        none_like = [
+            "no", "none", "nah", "not really", "nothing",
+            "any", "anything", "whatever", "doesn't matter", "does not matter", "no preference", "up to you","anything is fine", "i don't care", "i don't mind", "doesn't matter to me", "no specific preference","no prefernce"
+        ]
+        value = None if any(phrase in normalized for phrase in none_like) else user_message
+        # Fallback: If asking for artist_or_song and extractor fails, use raw input
         extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
-        for key in ["genre", "mood", "tempo", "artist_or_song"]:
-            if extracted.get(key):
-                memory.update_session(preference.session_id, key, extracted[key])
-        session = memory.get_session(preference.session_id)  # <-- re-fetch session here
+        if current == "artist_or_song" and not extracted.get("artist_or_song") and value:
+            memory.update_session(preference.session_id, current, value)
+        else:
+            memory.update_session(preference.session_id, current, value)
+            for key in ["genre", "mood", "tempo", "artist_or_song"]:
+                if extracted.get(key):
+                    memory.update_session(preference.session_id, key, extracted[key])
+
+        session = memory.get_session(preference.session_id)
         if session["pending_questions"]:
             next_q = session["pending_questions"][0]
             return {"response": question_for_key(next_q)}
