@@ -128,33 +128,25 @@ def recommend(preference: PreferenceInput):
     # Check for missing preferences
     # Only ask for missing if the value is not present AND not explicitly set to None by the user
     required_keys = ["genre", "mood", "tempo", "artist_or_song"]
-    missing = [key for key in required_keys if key not in session]
+    missing = [key for key in required_keys if key not in session or session[key] is None]
     if missing:
         session["pending_questions"] = missing
         memory.update_session(preference.session_id, "pending_questions", missing)
-        # Only show fallback if message is not music-related and nothing extracted
-        if not is_music_related(user_message) and not any(extracted.values()):
-            return {
-                "response": (
-                    "<span style='color:red'>Sorry, I can't help with that. Let's get back to your music vibe — "
-                    "what kind of mood or song are you into?</span>"
-                )
-            }
         return {"response": question_for_key(missing[0])}
+    else:
+        # recommend
+        song = recommend_engine(session)
+        if not song or song['song'] == "N/A":
+            return {
+                "response": "<span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
+            }
 
-    # All preferences are filled, proceed to recommendation
-    song = recommend_engine(session)
-    if not song or song['song'] == "N/A":
-        return {
-            "response": "<span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
-        }
+        memory.update_last_song(preference.session_id, song['song'], song['artist'])
+        gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
+        # Set awaiting_feedback flag
+        memory.update_session(preference.session_id, "awaiting_feedback", True)
 
-    memory.update_last_song(preference.session_id, song['song'], song['artist'])
-    gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
-    # Set awaiting_feedback flag
-    memory.update_session(preference.session_id, "awaiting_feedback", True)
-
-    return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
+        return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
 
 def question_for_key(key: str) -> str:
     prompts = {
@@ -227,7 +219,7 @@ def handle_command(command_input: CommandInput):
         memory.update_session(session_id, "pending_questions", keys)
         return {"response": question_for_key(keys[0])}
 
-    return {"response": "<span style='color:green'>You can say 'another one' or 'change genre' to keep going.</span>"}
+    return {"response": "<span style='color:green'>You can say 'another one', 'change genre', 'change artist', or 'reset' to start over.</span>"}
 
 @app.post("/reset")
 def reset_session(command_input: CommandInput):
