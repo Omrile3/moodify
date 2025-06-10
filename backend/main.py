@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 from typing import Optional
+import logging
 
 from recommender_eng import recommend_engine
 from memory import SessionMemory
@@ -24,6 +25,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+logging.basicConfig(level=logging.INFO)
 
 class PreferenceInput(BaseModel):
     session_id: str
@@ -82,8 +85,8 @@ def recommend(preference: PreferenceInput):
             "any", "anything", "whatever", "doesn't matter", "does not matter", "no preference", "up to you","anything is fine", "i don't care", "i don't mind", "doesn't matter to me", "no specific preference","no prefernce"
         ]
         value = None if any(phrase in normalized for phrase in none_like) else user_message
-        # Fallback: If asking for artist_or_song and extractor fails, use raw input
         extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
+        logging.info(f"[Extraction][PendingQ] User message: '{user_message}' | Extracted: {extracted}")
         if current == "artist_or_song" and not extracted.get("artist_or_song") and value:
             memory.update_session(preference.session_id, current, value)
         else:
@@ -102,6 +105,7 @@ def recommend(preference: PreferenceInput):
 
     # Always try to extract preferences from the message
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
+    logging.info(f"[Extraction][Main] User message: '{user_message}' | Extracted: {extracted}")
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if extracted.get(key):
             memory.update_session(preference.session_id, key, extracted[key])
@@ -109,21 +113,23 @@ def recommend(preference: PreferenceInput):
     session = memory.get_session(preference.session_id)
 
     # Check for missing preferences
-    missing = [key for key in ["genre", "mood", "tempo", "artist_or_song"] if not session.get(key)]
+    # Only ask for missing if the value is not present AND not explicitly set to None by the user
+    required_keys = ["genre", "mood", "tempo", "artist_or_song"]
+    missing = [key for key in required_keys if key not in session]
     if missing:
         session["pending_questions"] = missing
         memory.update_session(preference.session_id, "pending_questions", missing)
+        # Only show fallback if message is not music-related and nothing extracted
+        if not is_music_related(user_message) and not any(extracted.values()):
+            return {
+                "response": (
+                    "<span style='color:red'>Sorry, I can't help with that. Let's get back to your music vibe — "
+                    "what kind of mood or song are you into?</span>"
+                )
+            }
         return {"response": question_for_key(missing[0])}
 
-    # If all preferences are missing and the message is not music-related, show fallback
-    if not is_music_related(user_message) and not any(extracted.values()):
-        return {
-            "response": (
-                "<span style='color:red'>Sorry, I can't help with that. Let's get back to your music vibe — "
-                "what kind of mood or song are you into?</span>"
-            )
-        }
-
+    # All preferences are filled, proceed to recommendation
     song = recommend_engine(session)
     if not song or song['song'] == "N/A":
         return {
