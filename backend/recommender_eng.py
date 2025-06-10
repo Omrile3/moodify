@@ -118,6 +118,8 @@ def recommend_engine(preferences: dict):
         for _, row in filtered.iterrows():
             if (row["track_name"], row["track_artist"]) not in history:
                 top = row
+                history.append((row["track_name"], row["track_artist"]))
+                preferences["history"] = history
                 break
         if top is None:
             top = filtered.iloc[0]

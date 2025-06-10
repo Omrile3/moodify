@@ -105,8 +105,8 @@ def recommend(preference: PreferenceInput):
         # Robust handling for artist_or_song: treat any "none-like" answer as None
         if current == "artist_or_song":
             if any(phrase in normalized for phrase in none_like):
-                value = "any"
-                extracted["artist_or_song"] = "any"
+                value = None
+                extracted["artist_or_song"] = None
             elif extracted.get("artist_or_song") and any(phrase in extracted["artist_or_song"].lower() for phrase in none_like):
                 value = "any"
                 extracted["artist_or_song"] = "any"
@@ -118,7 +118,8 @@ def recommend(preference: PreferenceInput):
 
         session = memory.get_session(preference.session_id)
         if session["pending_questions"]:
-            next_q = session["pending_questions"][0]
+            next_q = session["pending_questions"].pop(0)
+            memory.update_session(preference.session_id, "pending_questions", session["pending_questions"])
             return {"response": question_for_key(next_q)}
         else:
             # Clear pending questions and resume with updated prefs
