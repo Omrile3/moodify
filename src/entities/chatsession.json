@@ -1,0 +1,73 @@
+{
+  "name": "ChatSession",
+  "type": "object",
+  "properties": {
+    "conversation_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "bot"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "description": "Chat conversation history"
+    },
+    "extracted_preferences": {
+      "type": "object",
+      "properties": {
+        "artists": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "genres": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "moods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Keywords like 'happy', 'energetic', 'sad', 'chill'"
+        },
+        "decade": {
+          "type": "string"
+        }
+      },
+      "description": "Extracted music preferences from conversation"
+    },
+    "recommended_songs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of recommended song IDs"
+    },
+    "is_complete": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the recommendation is complete"
+    }
+  },
+  "required": [
+    "conversation_history",
+    "extracted_preferences"
+  ]
+}
