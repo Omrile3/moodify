@@ -40,29 +40,89 @@ MOOD_VECTORS = {
 
 recommendation_map = precompute_recommendation_map(df)
 
+# --- Weighted recommendation logic ---
+SAD_MOODS = {"sad", "melancholy", "down", "emotional", "blue", "heartbreak", "gloomy"}
+HAPPY_MOODS = {"happy", "joy", "energetic", "upbeat", "party", "celebrate", "excited"}
+UPBEAT_WORDS = {"upbeat", "party", "dance", "energetic", "celebrate", "hyped", "intense"}
+SLOW_WORDS = {"slow", "ballad", "chill", "calm"}
+
+def normalize(val):
+    if isinstance(val, str):
+        return val.strip().lower()
+    return val
+
+def weighted_score(row, prefs):
+    mood = normalize(row.get('mood', row.get('mode_category', '')))
+    genre = normalize(row.get('playlist_genre', row.get('genre', '')))
+    tempo = normalize(row.get('tempo_category', row.get('tempo', '')))
+    artist = normalize(row.get('track_artist', ''))
+    track_name = normalize(row.get('track_name', ''))
+
+    score = 0
+
+    # GENRE + MOOD + TEMPO: Heavy weights
+    if prefs.get("genre"):
+        pgenre = normalize(prefs["genre"])
+        if pgenre in genre:
+            score += 8
+
+    if prefs.get("mood"):
+        pmood = normalize(prefs["mood"])
+        if pmood in mood or (pmood in SAD_MOODS and any(x in mood for x in SAD_MOODS)):
+            score += 8
+        elif pmood in SAD_MOODS and any(x in mood for x in HAPPY_MOODS):
+            score -= 7  # Don't pick happy songs for sad mood
+        elif pmood in mood:
+            score += 3
+
+    if prefs.get("tempo"):
+        ptempo = normalize(prefs["tempo"])
+        if ptempo in tempo or (ptempo in SLOW_WORDS and any(x in tempo for x in SLOW_WORDS)):
+            score += 8
+        elif ptempo in SLOW_WORDS and any(x in tempo for x in UPBEAT_WORDS):
+            score -= 5  # Don't pick upbeat for slow
+        elif ptempo in tempo:
+            score += 2
+
+    # Artist: Bonus only if matches
+    if prefs.get("artist_or_song"):
+        query = normalize(prefs["artist_or_song"])
+        if query in artist or query in track_name:
+            score += 2  # Bonus only
+
+    # Popularity as tiebreaker
+    if 'popularity' in row and not pd.isnull(row['popularity']):
+        score += float(row['popularity']) / 100.0
+
+    # Extra exclusions for sad/slow
+    if prefs.get("mood") and normalize(prefs["mood"]) in SAD_MOODS:
+        if any(w in mood for w in HAPPY_MOODS | UPBEAT_WORDS):
+            score -= 7
+
+    if prefs.get("tempo") and normalize(prefs["tempo"]) in SLOW_WORDS:
+        if any(w in tempo for w in UPBEAT_WORDS):
+            score -= 3
+
+    return score
+
 def recommend_engine(preferences: dict):
+    # --- Filter logic as before ---
     def apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=None):
         local_df = df.copy()
-        print(f"Filtering — Tempo: {filter_tempo}, Genre: {filter_genre}")
-
         if preferences.get("mood") and preferences["mood"] not in MOOD_VECTORS:
             preferences["mood"] = map_free_text_to_mood(preferences["mood"])
 
         if preferences.get("artist_or_song"):
-            print("Filtering by artist/song:", preferences["artist_or_song"])
             local_df = fuzzy_match_artist_song(local_df, preferences["artist_or_song"])
 
         if filter_genre and preferences.get("genre"):
-            print("Filtering by genre:", preferences["genre"])
             local_df = local_df[local_df['playlist_genre'].str.lower() == preferences["genre"].lower()]
 
         if filter_tempo and preferences.get("tempo"):
-            print("Filtering by tempo:", preferences["tempo"])
             bpm_range = convert_tempo_to_bpm(preferences["tempo"])
             local_df = local_df[(local_df['tempo_raw'] >= bpm_range[0]) & (local_df['tempo_raw'] <= bpm_range[1])]
 
         if preferences.get("mood") in MOOD_VECTORS and not local_df.empty:
-            print("Applying mood vector similarity:", preferences["mood"])
             mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
             similarities = cosine_similarity(mood_vec, local_df[features].values).flatten()
             local_df["similarity"] = similarities
@@ -70,7 +130,6 @@ def recommend_engine(preferences: dict):
 
         if exclude_artist:
             local_df = local_df[local_df["track_artist"].str.lower() != exclude_artist.lower()]
-            print(f"Excluding artist from recommendations: {exclude_artist}")
 
         return local_df
 
@@ -87,32 +146,40 @@ def recommend_engine(preferences: dict):
                 if artist.lower() in lowered:
                     exclude_artist = artist
                     preferences["artist_or_song"] = artist
-                    print(f"Similarity request detected — using: {artist}, but excluding it in results.")
                     break
 
     filtered = apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=exclude_artist)
-    print("Strict filter result:", filtered.shape)
-
     if filtered.empty:
-        print("No results — retrying without tempo...")
         filtered = apply_filters(preferences, filter_tempo=False, filter_genre=True, exclude_artist=exclude_artist)
-
     if filtered.empty:
-        print("Still no results — retrying without tempo or genre...")
         filtered = apply_filters(preferences, filter_tempo=False, filter_genre=False, exclude_artist=exclude_artist)
 
     history = preferences.get("history", [])
     top = None
 
-    if filtered.empty:
-        print("All filtering failed — fallback mode engaged.")
+    # --- Scoring logic added here ---
+    if not filtered.empty:
+        # Score all candidates
+        filtered = filtered.copy()
+        filtered["weighted_score"] = filtered.apply(lambda row: weighted_score(row, preferences), axis=1)
+        filtered = filtered.sort_values(by="weighted_score", ascending=False)
+        # Pick first not in history
+        for _, row in filtered.iterrows():
+            if (row["track_name"], row["track_artist"]) not in history:
+                top = row
+                history.append((row["track_name"], row["track_artist"]))
+                break
+        if top is None and not filtered.empty:
+            top = filtered.iloc[0]
+            history.append((top["track_name"], top["track_artist"]))
+    else:
+        # fallback logic as before
         genre = preferences.get("genre", "rock")
         tempo = preferences.get("tempo", "medium")
         mood = preferences.get("mood", "calm")
         energy = "energetic"
         key = build_recommendation_key(genre, mood, energy, tempo)
         fallback_list = recommendation_map.get(key, [])
-
         non_repeats = [song for song in fallback_list if (song["track_name"], song["track_artist"]) not in history]
         if non_repeats:
             top = random.choice(non_repeats)
@@ -122,15 +189,6 @@ def recommend_engine(preferences: dict):
             history.append((top["track_name"], top["track_artist"]))
         else:
             return None
-    else:
-        for _, row in filtered.iterrows():
-            if (row["track_name"], row["track_artist"]) not in history:
-                top = row
-                history.append((row["track_name"], row["track_artist"]))
-                break
-        if top is None:
-            top = filtered.iloc[0]
-            history.append((top["track_name"], top["track_artist"]))
 
     preferences["history"] = history
 
