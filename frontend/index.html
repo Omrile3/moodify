@@ -8,11 +8,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="chat-container">
-    <h1>Moodify 🎶</h1>
-    <div id="chat-box" class="chat-box"></div>
-    
-    <!-- Preferences Panel -->
+  <div class="main-layout">
+
     <div id="preferences-panel" class="preferences-panel">
       <h3>Your Preferences</h3>
       <ul>
@@ -22,16 +19,18 @@
         <li><strong>Artist:</strong> <span id="pref-artist">—</span></li>
       </ul>
     </div>
-
-    <div class="input-container">
-      <input type="text" id="user-input" placeholder="Type your preferences or commands..." />
-      <button onclick="sendMessage()">Send</button>
-      <button onclick="resetSession()" class="reset-btn">🔄 Reset</button>
+    <!-- Main Chat Container -->
+    <div class="chat-container">
+      <h1>Moodify 🎶</h1>
+      <div id="chat-box" class="chat-box"></div>
+      <div class="input-container">
+        <input type="text" id="user-input" placeholder="Type your preferences or commands..." />
+        <button onclick="sendMessage()">Send</button>
+        <button onclick="resetSession()" class="reset-btn">🔄 Reset</button>
+      </div>
+      <div id="quick-options" class="options"></div>
     </div>
-    
-    <div id="quick-options" class="options"></div>
   </div>
-
   <script src="script.js"></script>
 </body>
 </html>
