@@ -1,4 +1,4 @@
-const backendUrl = "https://moodify-backend-uj8d.onrender.com"; // Update this if testing locally or on a different deployment
+const backendUrl = "https://moodify-backend-uj8d.onrender.com"; // Update if testing locally/different deployment
 
 const sessionId = generateSessionId();
 
@@ -28,7 +28,7 @@ window.sendMessage = function () {
       setTimeout(() => {
         hideTypingIndicator();
         appendBotMessage(data.response || "Something went wrong.");
-        updatePreferencesPanel(); // Update panel after bot response
+        updatePreferencesPanel(); // Always fetch sidebar from backend after bot response
       }, delay);
     })
     .catch(error => {
@@ -41,6 +41,7 @@ window.sendMessage = function () {
 
 // Initial greeting on page load
 window.onload = () => {
+  document.getElementById("chat-box").innerHTML = ""; // Ensure chat is empty
   fetch(`${backendUrl}/recommend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -48,9 +49,8 @@ window.onload = () => {
   })
     .then(res => res.json())
     .then(data => {
-      document.getElementById("chat-box").innerHTML = ""; // Ensure chat is empty
       appendBotMessage(data.response);
-      updatePreferencesPanel(); // Show empty/default preferences at start
+      updatePreferencesPanel(); // Always get up-to-date preferences at start
     })
     .catch(error => {
       console.error("API error:", error);
@@ -123,7 +123,10 @@ window.resetSession = function () {
 
       document.getElementById("user-input").value = ""; // Clear user input field
 
-      appendBotMessage(data.response || "Session reset."); // Show reset greeting/message only
+      appendBotMessage(data.response || "Session reset.");
+
+      // Always update from backend to prevent any stale data, even after reset
+      updatePreferencesPanel();
     })
     .catch(error => {
       hideTypingIndicator();
@@ -140,7 +143,6 @@ window.resetSession = function () {
 };
 
 // --- Preferences Panel Logic ---
-
 function updatePreferencesPanel() {
   fetch(`${backendUrl}/session/${sessionId}`)
     .then(res => res.json())
