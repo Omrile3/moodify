@@ -56,21 +56,23 @@ h1 {
   word-wrap: break-word;
 }
 
-/* --- Preferences Panel --- */
+/* --- Preferences Panel (COMPACT) --- */
 .preferences-panel {
   background: linear-gradient(120deg, #222e2e 70%, #171c1c 100%);
   border: 1.5px solid #00ffcc50;
-  border-radius: 10px;
-  box-shadow: 0 2px 12px #00ffcce9, 0 0 1px #000;
-  padding: 16px 20px 10px 20px;
-  margin-bottom: 14px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px #00ffcce9, 0 0 1px #000;
+  padding: 8px 12px 5px 12px;    /* Smaller padding */
+  margin-bottom: 10px;
   margin-top: 2px;
   transition: box-shadow 0.2s;
+  max-width: 340px;              /* Limit width (adjust if needed) */
+  font-size: 0.97em;             /* Slightly smaller font */
 }
 
 .preferences-panel h3 {
-  margin: 0 0 10px 0;
-  font-size: 1.11em;
+  margin: 0 0 6px 0;
+  font-size: 0.98em;             /* Smaller title */
   color: #00ffcc;
   letter-spacing: 0.02em;
   font-weight: 600;
@@ -85,23 +87,25 @@ h1 {
 .preferences-panel li {
   display: flex;
   align-items: center;
-  margin-bottom: 4px;
-  font-size: 1em;
-  padding: 3px 0;
+  margin-bottom: 2px;
+  font-size: 0.98em;             /* Slightly smaller */
+  padding: 2px 0;
 }
 
 .preferences-panel strong {
-  min-width: 68px;
+  min-width: 58px;               /* Shorter label */
   font-weight: 600;
   color: #00ffe9;
   letter-spacing: 0.01em;
+  font-size: 0.96em;             /* Slightly smaller */
 }
 
 .preferences-panel span {
-  margin-left: 8px;
+  margin-left: 6px;
   font-weight: 500;
   letter-spacing: 0.01em;
   transition: color 0.15s;
+  font-size: 0.95em;             /* Smaller value */
 }
 
 /* Low-contrast for unset/no preference */
@@ -140,8 +144,14 @@ h1 {
     font-size: 0.95em;
   }
   .preferences-panel {
-    padding: 10px 8px 8px 10px;
-    margin-bottom: 9px;
+    padding: 7px 6px 4px 7px;
+    margin-bottom: 7px;
+    font-size: 0.94em;
+    max-width: 100%;
+  }
+  .preferences-panel strong,
+  .preferences-panel span {
+    font-size: 0.92em;
   }
 }
 
