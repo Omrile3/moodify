@@ -12,6 +12,17 @@
     <h1>Moodify 🎶</h1>
     <div id="chat-box" class="chat-box"></div>
     
+    <!-- Preferences Panel -->
+    <div id="preferences-panel" class="preferences-panel">
+      <h3>Your Preferences</h3>
+      <ul>
+        <li><strong>Genre:</strong> <span id="pref-genre">—</span></li>
+        <li><strong>Mood:</strong> <span id="pref-mood">—</span></li>
+        <li><strong>Tempo:</strong> <span id="pref-tempo">—</span></li>
+        <li><strong>Artist:</strong> <span id="pref-artist">—</span></li>
+      </ul>
+    </div>
+
     <div class="input-container">
       <input type="text" id="user-input" placeholder="Type your preferences or commands..." />
       <button onclick="sendMessage()">Send</button>

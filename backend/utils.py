@@ -211,3 +211,50 @@ def precompute_recommendation_map(df: pd.DataFrame) -> dict:
             index_map[key] = []
         index_map[key].append(row)
     return index_map
+
+### ------------- AI-DRIVEN NEXT MESSAGE ---------------
+def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
+    """
+    Use Llama3 to decide what to ask next or recommend, based on session state and user input.
+    """
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    known_prefs = []
+    for k in ["genre", "mood", "tempo", "artist_or_song"]:
+        v = session.get(k)
+        if v:
+            known_prefs.append(f"{k}: {v}")
+    prefs_str = ", ".join(known_prefs) if known_prefs else "none yet"
+
+    prompt = f"""
+You are Moodify, a helpful, friendly music AI. You are helping a user choose a song.
+Here is what you know about the user's preferences so far: {prefs_str}.
+
+Recent user message: "{last_user_message}"
+
+If you are still missing genre, mood, tempo, or artist, ask a short, friendly follow-up question about the most relevant missing thing if the user say they don't have any preference do not ask again.
+when you have enough info (mood is most important, but try collecting other elements if possible), say your recommended song in one concise, enthusiastic sentence, then ask the user if they like it.
+
+If the user asks to change something, help them do so.
+If the user resets or wants to start over, say a warm greeting and prompt for preferences again.
+
+Be as conversational as possible, do not use a fixed script. Reply with only your message, do not restate the session data.
+"""
+    body = {
+        "model": "llama3-70b-8192",
+        "messages": [
+            {"role": "system", "content": "You are a friendly AI music assistant."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 200
+    }
+    try:
+        response = requests.post(GROQ_API_URL, headers=headers, json=body)
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print("Groq next_ai_message error:", e)
+        return "What are you in the mood for today?"

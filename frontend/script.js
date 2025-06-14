@@ -28,12 +28,14 @@ window.sendMessage = function () {
       setTimeout(() => {
         hideTypingIndicator();
         appendBotMessage(data.response || "Something went wrong.");
+        updatePreferencesPanel(); // Update panel after bot response
       }, delay);
     })
     .catch(error => {
       console.error("API error:", error);
       hideTypingIndicator();
       appendBotMessage("⚠️ Sorry, something went wrong while contacting Moodify.");
+      updatePreferencesPanel();
     });
 };
 
@@ -45,10 +47,14 @@ window.onload = () => {
     body: JSON.stringify({ session_id: sessionId, artist_or_song: "hi" })
   })
     .then(res => res.json())
-    .then(data => appendBotMessage(data.response))
+    .then(data => {
+      appendBotMessage(data.response);
+      updatePreferencesPanel(); // Show empty/default preferences at start
+    })
     .catch(error => {
       console.error("API error:", error);
       appendBotMessage("⚠️ Sorry, something went wrong while contacting Moodify.");
+      updatePreferencesPanel();
     });
 };
 
@@ -106,6 +112,7 @@ window.resetSession = function () {
     .then(data => {
       hideTypingIndicator();
       appendBotMessage(data.response || "Session reset.");
+      updatePreferencesPanel(); // Reset preferences panel
       // Optionally clear chat box except for the greeting:
       // document.getElementById("chat-box").innerHTML = "";
     })
@@ -113,5 +120,37 @@ window.resetSession = function () {
       hideTypingIndicator();
       appendBotMessage("⚠️ Sorry, something went wrong while resetting your session.");
       console.error("Reset error:", error);
+      updatePreferencesPanel();
     });
 };
+
+// --- NEW: Preferences Panel Logic ---
+
+function updatePreferencesPanel() {
+  fetch(`${backendUrl}/session/${sessionId}`)
+    .then(res => res.json())
+    .then(data => {
+      // Defensive defaults
+      const genre = data.genre ? capitalize(data.genre) : '—';
+      const mood = data.mood ? capitalize(data.mood) : '—';
+      const tempo = data.tempo ? capitalize(data.tempo) : '—';
+      const artist = data.artist_or_song ? capitalize(data.artist_or_song) : '—';
+
+      document.getElementById("pref-genre").innerText = genre;
+      document.getElementById("pref-mood").innerText = mood;
+      document.getElementById("pref-tempo").innerText = tempo;
+      document.getElementById("pref-artist").innerText = artist;
+    })
+    .catch(() => {
+      // In case backend fails, clear to dashes
+      document.getElementById("pref-genre").innerText = '—';
+      document.getElementById("pref-mood").innerText = '—';
+      document.getElementById("pref-tempo").innerText = '—';
+      document.getElementById("pref-artist").innerText = '—';
+    });
+}
+
+function capitalize(s) {
+  if (typeof s !== "string") return s;
+  return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
+}

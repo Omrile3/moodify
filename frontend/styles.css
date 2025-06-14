@@ -56,6 +56,95 @@ h1 {
   word-wrap: break-word;
 }
 
+/* --- Preferences Panel --- */
+.preferences-panel {
+  background: linear-gradient(120deg, #222e2e 70%, #171c1c 100%);
+  border: 1.5px solid #00ffcc50;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px #00ffcce9, 0 0 1px #000;
+  padding: 16px 20px 10px 20px;
+  margin-bottom: 14px;
+  margin-top: 2px;
+  transition: box-shadow 0.2s;
+}
+
+.preferences-panel h3 {
+  margin: 0 0 10px 0;
+  font-size: 1.11em;
+  color: #00ffcc;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+.preferences-panel ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.preferences-panel li {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 1em;
+  padding: 3px 0;
+}
+
+.preferences-panel strong {
+  min-width: 68px;
+  font-weight: 600;
+  color: #00ffe9;
+  letter-spacing: 0.01em;
+}
+
+.preferences-panel span {
+  margin-left: 8px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: color 0.15s;
+}
+
+/* Low-contrast for unset/no preference */
+.preferences-panel span:empty,
+.preferences-panel span,
+.preferences-panel span.no-pref {
+  color: #7fe2d8bb;
+  font-style: italic;
+}
+
+.preferences-panel span:not(.no-pref):not(:empty) {
+  color: #fff;
+  font-style: normal;
+}
+
+/* Responsive tweaks */
+@media (max-width: 600px) {
+  .chat-container {
+    padding: 14px;
+    border-radius: 0;
+    height: 100vh;
+  }
+
+  .chat-box {
+    padding: 10px;
+    font-size: 0.95em;
+  }
+
+  input[type="text"] {
+    font-size: 1em;
+    padding: 10px;
+  }
+
+  button {
+    padding: 10px 16px;
+    font-size: 0.95em;
+  }
+  .preferences-panel {
+    padding: 10px 8px 8px 10px;
+    margin-bottom: 9px;
+  }
+}
+
 .input-container {
   display: flex;
   margin-top: auto;
@@ -127,29 +216,6 @@ button:hover {
   color: #00ffcc;
 }
 
-/* 📱 Mobile Responsive */
-@media (max-width: 600px) {
-  .chat-container {
-    padding: 14px;
-    border-radius: 0;
-    height: 100vh;
-  }
-
-  .chat-box {
-    padding: 10px;
-    font-size: 0.95em;
-  }
-
-  input[type="text"] {
-    font-size: 1em;
-    padding: 10px;
-  }
-
-  button {
-    padding: 10px 16px;
-    font-size: 0.95em;
-  }
-}
 #typing-indicator {
   font-style: italic;
   color: #cccccc;
