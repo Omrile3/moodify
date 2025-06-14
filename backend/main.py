@@ -55,9 +55,15 @@ def recommend(preference: PreferenceInput):
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if extracted.get(key):
             memory.update_session(preference.session_id, key, extracted[key])
-    session = memory.get_session(preference.session_id)
 
+    session = memory.get_session(preference.session_id)
     required_keys = ["genre", "mood", "tempo", "artist_or_song"]
+
+    # --- FOLLOWUP COUNTER: RESET IF USER PROVIDES A NEW PREFERENCE ---
+    # If the user enters a non-empty preference, reset the followup counter.
+    if any(extracted.get(k) for k in ["genre", "mood", "tempo", "artist_or_song"]):
+        memory.update_session(preference.session_id, "followup_count", 0)
+
     # If all info present, recommend song
     if all(session.get(k) for k in required_keys):
         song = recommend_engine(session)
@@ -68,10 +74,32 @@ def recommend(preference: PreferenceInput):
         memory.update_last_song(preference.session_id, song['song'], song['artist'])
         gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
         memory.update_session(preference.session_id, "awaiting_feedback", True)
+        # Reset followup count for next round
+        memory.update_session(preference.session_id, "followup_count", 0)
         return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
     else:
-        # Let AI decide what to ask next
+        # --- FOLLOWUP COUNTER LOGIC ---
+        followup_count = session.get("followup_count", 0)
+        # After 3 followups, force a recommendation by "pretending" all required keys are present
+        if followup_count >= 3:
+            # Fallback recommend with what info is available (even if some keys are None)
+            fake_session = {k: session.get(k) for k in required_keys}
+            for k in required_keys:
+                if not fake_session[k]:
+                    fake_session[k] = "any"
+            song = recommend_engine(fake_session)
+            if not song or song['song'] == "N/A":
+                return {
+                    "response": "<span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
+                }
+            memory.update_last_song(preference.session_id, song['song'], song['artist'])
+            gpt_message = generate_chat_response(song, fake_session, GROQ_API_KEY)
+            # Reset followup count for next round
+            memory.update_session(preference.session_id, "followup_count", 0)
+            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
+        # Otherwise, increment and continue
         ai_message = next_ai_message(session, user_message, GROQ_API_KEY)
+        memory.update_session(preference.session_id, "followup_count", followup_count + 1)
         return {"response": f"<span style='color:green'>{ai_message}</span>"}
 
 @app.post("/command")

@@ -102,6 +102,7 @@ function calculateTypingDelay(text) {
   return Math.min(3000, wordCount * delayPerWord);
 }
 
+// --- PATCHED RESET: reload page after backend reset ---
 window.resetSession = function () {
   showTypingIndicator();
   fetch(`${backendUrl}/reset`, {
@@ -111,22 +112,8 @@ window.resetSession = function () {
   })
     .then(res => res.json())
     .then(data => {
-      hideTypingIndicator();
-
-      // --- FULL RESET: clear chat, preferences, and input ---
-      document.getElementById("chat-box").innerHTML = ""; // Clear all chat history
-
-      document.getElementById("pref-genre").innerText = '—';
-      document.getElementById("pref-mood").innerText = '—';
-      document.getElementById("pref-tempo").innerText = '—';
-      document.getElementById("pref-artist").innerText = '—';
-
-      document.getElementById("user-input").value = ""; // Clear user input field
-
-      appendBotMessage(data.response || "Session reset.");
-
-      // Always update from backend to prevent any stale data, even after reset
-      updatePreferencesPanel();
+      // After backend confirms, reload the page for a full fresh state
+      window.location.reload();
     })
     .catch(error => {
       hideTypingIndicator();
