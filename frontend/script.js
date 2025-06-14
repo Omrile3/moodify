@@ -48,6 +48,7 @@ window.onload = () => {
   })
     .then(res => res.json())
     .then(data => {
+      document.getElementById("chat-box").innerHTML = ""; // Ensure chat is empty
       appendBotMessage(data.response);
       updatePreferencesPanel(); // Show empty/default preferences at start
     })
@@ -111,20 +112,34 @@ window.resetSession = function () {
     .then(res => res.json())
     .then(data => {
       hideTypingIndicator();
-      appendBotMessage(data.response || "Session reset.");
-      updatePreferencesPanel(); // Reset preferences panel
-      // Optionally clear chat box except for the greeting:
-      // document.getElementById("chat-box").innerHTML = "";
+
+      // --- FULL RESET: clear chat, preferences, and input ---
+      document.getElementById("chat-box").innerHTML = ""; // Clear all chat history
+
+      document.getElementById("pref-genre").innerText = '—';
+      document.getElementById("pref-mood").innerText = '—';
+      document.getElementById("pref-tempo").innerText = '—';
+      document.getElementById("pref-artist").innerText = '—';
+
+      document.getElementById("user-input").value = ""; // Clear user input field
+
+      appendBotMessage(data.response || "Session reset."); // Show reset greeting/message only
     })
     .catch(error => {
       hideTypingIndicator();
       appendBotMessage("⚠️ Sorry, something went wrong while resetting your session.");
       console.error("Reset error:", error);
-      updatePreferencesPanel();
+
+      // Also reset panel in case backend fails
+      document.getElementById("pref-genre").innerText = '—';
+      document.getElementById("pref-mood").innerText = '—';
+      document.getElementById("pref-tempo").innerText = '—';
+      document.getElementById("pref-artist").innerText = '—';
+      document.getElementById("user-input").value = "";
     });
 };
 
-// --- NEW: Preferences Panel Logic ---
+// --- Preferences Panel Logic ---
 
 function updatePreferencesPanel() {
   fetch(`${backendUrl}/session/${sessionId}`)
