@@ -52,47 +52,59 @@ def normalize(val):
     return val
 
 def weighted_score(row, prefs):
-    mood = normalize(row.get('mood', row.get('mode_category', '')))
-    genre = normalize(row.get('playlist_genre', row.get('genre', '')))
-    tempo = normalize(row.get('tempo_category', row.get('tempo', '')))
-    artist = normalize(row.get('track_artist', ''))
-    track_name = normalize(row.get('track_name', ''))
+    # Mood, genre, tempo, artist
+    mood = normalize(row.get('mode_category', '')) if 'mode_category' in row else ''
+    genre = normalize(row.get('playlist_genre', '')) if 'playlist_genre' in row else ''
+    tempo = normalize(row.get('tempo_category', '')) if 'tempo_category' in row else ''
+    artist = normalize(row.get('track_artist', '')) if 'track_artist' in row else ''
+    track_name = normalize(row.get('track_name', '')) if 'track_name' in row else ''
+    # Extra: allow fallback to CSV field 'mood' if exists
+    if not mood and 'mood' in row:
+        mood = normalize(row.get('mood', ''))
 
     score = 0
 
     # GENRE + MOOD + TEMPO: Heavy weights
     if prefs.get("genre"):
         pgenre = normalize(prefs["genre"])
-        if pgenre in genre:
+        if pgenre and pgenre in genre:
             score += 8
 
     if prefs.get("mood"):
         pmood = normalize(prefs["mood"])
-        if pmood in mood or (pmood in SAD_MOODS and any(x in mood for x in SAD_MOODS)):
+        if pmood and pmood in mood:
+            score += 8
+        elif pmood in SAD_MOODS and any(x in mood for x in SAD_MOODS):
             score += 8
         elif pmood in SAD_MOODS and any(x in mood for x in HAPPY_MOODS):
-            score -= 7  # Don't pick happy songs for sad mood
-        elif pmood in mood:
+            score -= 10  # Major penalty if sad mood requested but song is happy/upbeat
+        elif pmood and pmood in mood:
             score += 3
 
     if prefs.get("tempo"):
         ptempo = normalize(prefs["tempo"])
-        if ptempo in tempo or (ptempo in SLOW_WORDS and any(x in tempo for x in SLOW_WORDS)):
+        if ptempo and ptempo in tempo:
+            score += 8
+        elif ptempo in SLOW_WORDS and any(x in tempo for x in SLOW_WORDS):
             score += 8
         elif ptempo in SLOW_WORDS and any(x in tempo for x in UPBEAT_WORDS):
-            score -= 5  # Don't pick upbeat for slow
-        elif ptempo in tempo:
+            score -= 5  # Penalty for slow preference but upbeat song
+        elif ptempo and ptempo in tempo:
             score += 2
 
     # Artist: Bonus only if matches
     if prefs.get("artist_or_song"):
         query = normalize(prefs["artist_or_song"])
-        if query in artist or query in track_name:
+        if query and (query in artist or query in track_name):
             score += 2  # Bonus only
 
     # Popularity as tiebreaker
-    if 'popularity' in row and not pd.isnull(row['popularity']):
-        score += float(row['popularity']) / 100.0
+    pop_val = row.get('track_popularity', row.get('popularity', None))
+    if pop_val is not None and not pd.isnull(pop_val):
+        try:
+            score += float(pop_val) / 100.0
+        except Exception:
+            pass
 
     # Extra exclusions for sad/slow
     if prefs.get("mood") and normalize(prefs["mood"]) in SAD_MOODS:
@@ -106,7 +118,6 @@ def weighted_score(row, prefs):
     return score
 
 def recommend_engine(preferences: dict):
-    # --- Filter logic as before ---
     def apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=None):
         local_df = df.copy()
         if preferences.get("mood") and preferences["mood"] not in MOOD_VECTORS:
@@ -157,9 +168,8 @@ def recommend_engine(preferences: dict):
     history = preferences.get("history", [])
     top = None
 
-    # --- Scoring logic added here ---
+    # --- Scoring logic ---
     if not filtered.empty:
-        # Score all candidates
         filtered = filtered.copy()
         filtered["weighted_score"] = filtered.apply(lambda row: weighted_score(row, preferences), axis=1)
         filtered = filtered.sort_values(by="weighted_score", ascending=False)

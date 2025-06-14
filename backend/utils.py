@@ -127,16 +127,18 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
 
     prompt = f"""
 You are an AI that extracts music preferences from user input.
-Respond only in valid JSON with 4 keys: genre, mood, tempo, artist_or_song.
+Respond only in valid JSON with exactly these 4 keys: genre, mood, tempo, artist_or_song.
 If a value is not explicitly or implicitly stated, use null.
 
-Understand tone and emotion to classify mood:
-- "I feel like crying", "it's been a tough day" → "sad"
-- "let’s party", "hyped up", "workout music" → "energetic"
-- "need to relax", "chill", "lofi", "study" → "calm"
-- "sunny day", "good mood", "sing along" → "happy"
+If the user mentions a mood like "sad", "happy", "calm", or "energetic", copy that word directly as the mood.
+If the user mentions a genre like "indie", "pop", "rock", "jazz", etc., copy that directly as the genre.
 
-Also extract genre (pop, rock, classical, etc.), tempo (slow, medium, fast), or artist/song names.
+Do NOT map or reinterpret "sad" to "calm" or anything else; preserve mood/genre exactly as the user says, unless the user gives a clear synonym ("melancholy" → "sad" is OK).
+
+Examples:
+- "I'm feeling sad" → mood: "sad"
+- "I like indie music" → genre: "indie"
+- "I'm happy and want upbeat pop" → mood: "happy", genre: "pop", tempo: "fast" or "upbeat"
 
 Input: "{message}"
 """
@@ -144,10 +146,10 @@ Input: "{message}"
     body = {
         "model": "llama3-70b-8192",
         "messages": [
-            {"role": "system", "content": "You extract music preferences from user messages in JSON."},
+            {"role": "system", "content": "You extract music preferences from user messages in JSON, copying mood and genre words exactly unless a clear synonym is used. Do NOT reinterpret 'sad' or 'indie'."},
             {"role": "user", "content": prompt}
         ],
-        "temperature": 0.3,
+        "temperature": 0.2,
         "max_tokens": 250
     }
 
@@ -234,15 +236,21 @@ Here is what you know about the user's preferences so far: {prefs_str}.
 
 Recent user message: "{last_user_message}"
 
-If you are still missing genre, mood, tempo, or artist, ask a short (1 line), friendly follow-up question about the most relevant missing thing (focus on mood/genre/artist/tempo). If the user says they don't have any preference, do not ask again about that preference.
-When you have enough info (mood is most important, but try collecting other elements if possible), say your recommended song in one concise (one line), enthusiastic sentence, then ask the user if they like it.
+If you are still missing genre, mood, tempo, or artist, ask a short (1 line), friendly follow-up question about the next missing thing. If the user says they don't have any preference, do not ask again on that subject   .
+When you have enough info, say your recommended song in one concise (one line), enthusiastic sentence, then ask the user if they like it.
 genre can be any of: {', '.join(GENRES)}.
 mood can be: sad, energetic, calm, happy.
 tempo can be: slow, medium, fast.
 artist_or_song can be any artist or song name.
 
+- NEVER ask the user the same thing twice or to confirm the same preference repeatedly.
+- If you already know at least two out of genre, mood, and tempo, STOP asking clarifying questions and RECOMMEND a song. 
+- If the user says "yes", "no", or repeats their preference, just move forward or adjust accordingly.
+- You may ask up to 2 follow-up questions if mood or genre is still missing, but never repeat yourself.
+- After 3 clarifying messages, you must always recommend a song, even if something is missing.
+- Do NOT restate the session data, just reply naturally as a chat assistant.
+
 If the user asks to change something, help them do so.
-If the user resets or wants to start over, say a warm greeting and prompt for preferences again.
 
 Be as conversational as possible, do not use a fixed script. Reply with only your message, do not restate the session data. 
 Ask a maximum of 4 questions before recommending a song.
