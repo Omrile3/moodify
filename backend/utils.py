@@ -234,13 +234,18 @@ Here is what you know about the user's preferences so far: {prefs_str}.
 
 Recent user message: "{last_user_message}"
 
-If you are still missing genre, mood, tempo, or artist, ask a short (1-2 lines), friendly follow-up question about the most relevant missing thing focusin on mood/genre/artist/tempo. if the user say they don't have any preference do not ask again.
-when you have enough info (mood is most important, but try collecting other elements if possible), say your recommended song in one concise, enthusiastic sentence, then ask the user if they like it.
+If you are still missing genre, mood, tempo, or artist, ask a short (1 line), friendly follow-up question about the most relevant missing thing (focus on mood/genre/artist/tempo). If the user says they don't have any preference, do not ask again about that preference.
+When you have enough info (mood is most important, but try collecting other elements if possible), say your recommended song in one concise (one line), enthusiastic sentence, then ask the user if they like it.
+genre can be any of: {', '.join(GENRES)}.
+mood can be: sad, energetic, calm, happy.
+tempo can be: slow, medium, fast.
+artist_or_song can be any artist or song name.
 
 If the user asks to change something, help them do so.
 If the user resets or wants to start over, say a warm greeting and prompt for preferences again.
 
-Be as conversational as possible, do not use a fixed script. Reply with only your message, do not restate the session data. ask max 4 question before recommending a song.
+Be as conversational as possible, do not use a fixed script. Reply with only your message, do not restate the session data. 
+Ask a maximum of 4 questions before recommending a song.
 """
     body = {
         "model": "llama3-70b-8192",
