@@ -144,15 +144,13 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
     }
     # Also cover general "anything/no preference/whatever" with minimal input
     if any(is_none_like(word) for word in msg.split()):
-        # If a short msg, assign "none" to all categories
         if len(msg.split()) <= 3:
             for key in none_fields:
                 none_fields[key] = True
 
-    # LLM fallback for complex extraction (but don't override explicit "none")
+    # --- PATCH: Robust LLM call and JSON extraction ---
     extracted = {}
     if not any(none_fields.values()):
-        # Use LLM only if we don't have an explicit "none" field
         prompt = f"""
 You are an AI that extracts music preferences from user input.
 Respond only in valid JSON with exactly these 4 keys: genre, mood, tempo, artist_or_song.
@@ -170,7 +168,6 @@ Examples:
 
 Input: "{message}"
 """
-
         body = {
             "model": "llama3-70b-8192",
             "messages": [
@@ -185,8 +182,24 @@ Input: "{message}"
             response = requests.post(GROQ_API_URL, headers=headers, json=body)
             response.raise_for_status()
             text = response.json()["choices"][0]["message"]["content"]
-            text = text[text.index("{"):text.rindex("}")+1]
-            extracted = json.loads(text)
+
+            # --- PATCH: Robust JSON extraction ---
+            import re
+            text = text.strip()
+            if text.startswith("```"):
+                text = text.lstrip("`")
+                text = text[text.find("{"):]
+            match = re.search(r"\{[\s\S]*\}", text)
+            if match:
+                json_text = match.group(0)
+                try:
+                    extracted = json.loads(json_text)
+                except Exception as e:
+                    print("Groq Extraction Error (inner):", e, "| Offending text:", repr(json_text))
+                    extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
+            else:
+                print("Groq Extraction Error: Could not find JSON object in:", repr(text))
+                extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
         except Exception as e:
             print("Groq Extraction Error:", e)
             extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
@@ -206,7 +219,6 @@ Input: "{message}"
 
     return {k: extracted.get(k, None) for k in ["genre", "mood", "tempo", "artist_or_song"]}
 
-# ... rest of file unchanged ...
 
 def map_free_text_to_mood(text: str) -> str:
     text = text.lower()
