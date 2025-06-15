@@ -93,7 +93,7 @@ def recommend(preference: PreferenceInput):
             memory.update_last_song(preference.session_id, song['song'], song['artist'])
             gpt_message = generate_chat_response(song, fake_session, GROQ_API_KEY)
             memory.update_session(preference.session_id, "followup_count", 0)
-            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
+            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you? Say no for another rec, or yes to keep it."}
         ai_message = next_ai_message(session, user_message, GROQ_API_KEY)
         memory.update_session(preference.session_id, "followup_count", followup_count + 1)
         return {"response": f"<span style='color:green'>{ai_message}</span>"}
@@ -105,7 +105,7 @@ def handle_command(command_input: CommandInput):
     session = memory.get_session(session_id)
 
     # Reset session if asked
-    if "start over" in cmd or "restart" in cmd or "reset" in cmd:
+    if any(word in cmd for word in ["start over", "restart", "reset"]):
         memory.reset_session(session_id)
         session = memory.get_session(session_id)
         return {
@@ -113,45 +113,64 @@ def handle_command(command_input: CommandInput):
                 "🔁 <span style='color:green'>Alright! Let’s start fresh. How are you feeling right now?</span>"
             )
         }
-    # Give another suggestion if requested
-    if "another" in cmd or "again" in cmd:
+
+    # If user says "another" or similar, just recommend again with same preferences but avoid last song
+    if any(word in cmd for word in ["another", "again", "next one"]):
         session["history"] = [(session.get("last_song"), session.get("last_artist"))]
         song = recommend_engine(session)
         if not song or song['song'] == "N/A":
-            return {"response": "<span style='color:green'>I couldn’t find another one. Want to change mood or artist?</span>"}
+            return {"response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"}
         memory.update_last_song(session_id, song['song'], song['artist'])
         gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
-        return {"response": f"<span style='color:green'>{gpt_message}</span><br>Did you like that one?"}
+        memory.update_session(session_id, "awaiting_feedback", True)
+        return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
 
-    elif "change" in cmd or "didn't like" in cmd or "no" in cmd:
-        if session.get("awaiting_feedback"):
-            prefs = [session.get(k) for k in ["genre", "mood", "tempo", "artist_or_song"] if session.get(k)]
-            prefs_str = ", ".join(prefs)
+    # If awaiting feedback after a recommendation
+    if session.get("awaiting_feedback"):
+        # If "no", keep recommending
+        if any(word in cmd for word in ["no", "didn't", "not really", "did not", "nah", "not a good fit", "not fit", "try again"]):
+            # Mark previous song in history so it's not repeated
+            session["history"].append((session.get("last_song"), session.get("last_artist")))
+            song = recommend_engine(session)
+            if not song or song['song'] == "N/A":
+                return {
+                    "response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"
+                }
+            memory.update_last_song(session_id, song['song'], song['artist'])
+            gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
+            memory.update_session(session_id, "awaiting_feedback", True)
+            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
+        # If "yes", give positive ending
+        if any(word in cmd for word in ["yes", "love", "liked", "good", "great", "perfect", "awesome", "sure"]):
             memory.update_session(session_id, "awaiting_feedback", False)
             return {
                 "response": (
-                    f"😔 <span style='color:green'>I'm sorry that wasn't quite right. "
-                    f"I looked up a <b>{prefs_str}</b> song. Want another one?</span>"
-                )
-            }
-        else:
-            return {
-                "response": (
-                    "🔁 <span style='color:green'>What would you like to change in your preferences? "
-                    "(genre, mood, tempo, artist)</span>"
+                    "😊 <span style='color:green'>Great! If you want to hear something different, just reset the chat.</span>"
                 )
             }
 
-    elif "yes" in cmd or "love" in cmd or "liked" in cmd or "good" in cmd:
-        memory.update_session(session_id, "awaiting_feedback", False)
+    # If the user wants to change an element, prompt for the new value and clear the old
+    for pref in ["genre", "mood", "tempo", "artist"]:
+        if f"change {pref}" in cmd or f"switch {pref}" in cmd or f"new {pref}" in cmd or (pref in cmd and "change" in cmd):
+            # Clear the current preference and ask for new value
+            field = "artist_or_song" if pref == "artist" else pref
+            memory.update_session(session_id, field, None)
+            memory.update_session(session_id, f"no_pref_{field}", False)  # allow user to re-specify
+            memory.update_session(session_id, "awaiting_feedback", False)
+            return {
+                "response": f"<span style='color:green'>Sure! What {pref} would you like instead?</span>"
+            }
+
+    # If user says what they want changed, but is vague, ask for clarification
+    if "change" in cmd or "something else" in cmd or "different" in cmd:
         return {
             "response": (
-                "😊 <span style='color:green'>I'm glad you liked it! "
-                "Say 'another one', 'change genre', or 'reset' anytime to explore more.</span>"
+                "<span style='color:green'>Which preference would you like to change? (genre, mood, tempo, or artist)</span>"
             )
         }
 
-    return {"response": "<span style='color:green'>You can say 'another one', 'change genre', 'change artist', or 'reset' to start over.</span>"}
+    # Generic help
+    return {"response": "<span style='color:green'>You can say 'another one', 'change genre', 'change artist', 'change mood', 'change tempo', or 'reset' to start over.</span>"}
 
 @app.post("/reset")
 def reset_session(command_input: CommandInput):
