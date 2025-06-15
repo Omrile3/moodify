@@ -50,6 +50,10 @@ def recommend(preference: PreferenceInput):
     )
     session = memory.get_session(preference.session_id)
 
+    # GUARD: If awaiting feedback, do not recommend again until /command clears it!
+    if session.get("awaiting_feedback", False):
+        return {"response": None}
+
     # Always extract new info
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
@@ -93,6 +97,7 @@ def recommend(preference: PreferenceInput):
             memory.update_last_song(preference.session_id, song['song'], song['artist'])
             gpt_message = generate_chat_response(song, fake_session, GROQ_API_KEY)
             memory.update_session(preference.session_id, "followup_count", 0)
+            memory.update_session(preference.session_id, "awaiting_feedback", True)
             return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you? Say no for another rec, or yes to keep it."}
         ai_message = next_ai_message(session, user_message, GROQ_API_KEY)
         memory.update_session(preference.session_id, "followup_count", followup_count + 1)
@@ -104,52 +109,7 @@ def handle_command(command_input: CommandInput):
     session_id = command_input.session_id
     session = memory.get_session(session_id)
 
-    # Reset session if asked
-    if any(word in cmd for word in ["start over", "restart", "reset"]):
-        memory.reset_session(session_id)
-        session = memory.get_session(session_id)
-        return {
-            "response": (
-                "🔁 <span style='color:green'>Alright! Let’s start fresh. How are you feeling right now?</span>"
-            )
-        }
-
-    # If user says "another" or similar, just recommend again with same preferences but avoid last song
-    if any(word in cmd for word in ["another", "again", "next one"]):
-        session["history"] = [(session.get("last_song"), session.get("last_artist"))]
-        song = recommend_engine(session)
-        if not song or song['song'] == "N/A":
-            return {"response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"}
-        memory.update_last_song(session_id, song['song'], song['artist'])
-        gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
-        memory.update_session(session_id, "awaiting_feedback", True)
-        return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
-
-    # If awaiting feedback after a recommendation
-    if session.get("awaiting_feedback"):
-        # If "no", keep recommending
-        if any(word in cmd for word in ["no", "didn't", "not really", "did not", "nah", "not a good fit", "not fit", "try again"]):
-            # Mark previous song in history so it's not repeated
-            session["history"].append((session.get("last_song"), session.get("last_artist")))
-            song = recommend_engine(session)
-            if not song or song['song'] == "N/A":
-                return {
-                    "response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"
-                }
-            memory.update_last_song(session_id, song['song'], song['artist'])
-            gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
-            memory.update_session(session_id, "awaiting_feedback", True)
-            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
-        # If "yes", give positive ending
-        if any(word in cmd for word in ["yes", "love", "liked", "good", "great", "perfect", "awesome", "sure"]):
-            memory.update_session(session_id, "awaiting_feedback", False)
-            return {
-                "response": (
-                    "😊 <span style='color:green'>Great! If you want to hear something different, just reset the chat.</span>"
-                )
-            }
-
-    # If the user wants to change an element, prompt for the new value and clear the old
+    # --- 1. PRIORITY: Change preferences if asked ---
     for pref in ["genre", "mood", "tempo", "artist"]:
         if f"change {pref}" in cmd or f"switch {pref}" in cmd or f"new {pref}" in cmd or (pref in cmd and "change" in cmd):
             # Clear the current preference and ask for new value
@@ -161,7 +121,51 @@ def handle_command(command_input: CommandInput):
                 "response": f"<span style='color:green'>Sure! What {pref} would you like instead?</span>"
             }
 
-    # If user says what they want changed, but is vague, ask for clarification
+    # --- 2. Reset session if asked ---
+    if any(word in cmd for word in ["start over", "restart", "reset"]):
+        memory.reset_session(session_id)
+        session = memory.get_session(session_id)
+        return {
+            "response": (
+                "🔁 <span style='color:green'>Alright! Let’s start fresh. How are you feeling right now?</span>"
+            )
+        }
+
+    # --- 3. Recommend another song if user asks ---
+    if any(word in cmd for word in ["another", "again", "next one"]):
+        session["history"] = [(session.get("last_song"), session.get("last_artist"))]
+        song = recommend_engine(session)
+        if not song or song['song'] == "N/A":
+            return {"response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"}
+        memory.update_last_song(session_id, song['song'], song['artist'])
+        gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
+        memory.update_session(session_id, "awaiting_feedback", True)
+        return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
+
+    # --- 4. Handle feedback after recommendation ---
+    if session.get("awaiting_feedback"):
+        # If "no", keep recommending
+        if any(word in cmd for word in ["no", "didn't", "not really", "did not", "nah", "not a good fit", "not fit", "try again"]):
+            session["history"].append((session.get("last_song"), session.get("last_artist")))
+            song = recommend_engine(session)
+            if not song or song['song'] == "N/A":
+                return {
+                    "response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"
+                }
+            memory.update_last_song(session_id, song['song'], song['artist'])
+            gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
+            memory.update_session(session_id, "awaiting_feedback", True)
+            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
+        # If "yes", close feedback loop
+        if any(word in cmd for word in ["yes", "love", "liked", "good", "great", "perfect", "awesome", "sure"]):
+            memory.update_session(session_id, "awaiting_feedback", False)
+            return {
+                "response": (
+                    "😊 <span style='color:green'>Great! If you want to hear something different, just reset the chat.</span>"
+                )
+            }
+
+    # --- 5. If user says what they want changed, but is vague, ask for clarification ---
     if "change" in cmd or "something else" in cmd or "different" in cmd:
         return {
             "response": (
@@ -169,7 +173,7 @@ def handle_command(command_input: CommandInput):
             )
         }
 
-    # Generic help
+    # --- 6. Generic help ---
     return {"response": "<span style='color:green'>You can say 'another one', 'change genre', 'change artist', 'change mood', 'change tempo', or 'reset' to start over.</span>"}
 
 @app.post("/reset")
