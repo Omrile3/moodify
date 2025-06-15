@@ -121,11 +121,17 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
 
     msg = message.strip().lower()
 
-    # --- PATCH: catch "none/no preference/anything" directly for all fields ---
-    def is_none_like(val):
-        return val in NONE_LIKE or any(val.strip() == word for word in NONE_LIKE)
+    # --- PATCH: Robust "none-like" phrase detection ---
+    def contains_none_like(val):
+        for none_str in NONE_LIKE:
+            if f" {none_str} " in f" {val} ":
+                return True
+        return False
 
-    # Try to auto-map vague mood/tempo responses (fast path, pre-LLM)
+    # If message contains ANY none-like, mark ALL as "no preference"
+    none_fields = {field: contains_none_like(msg) for field in ["genre", "mood", "tempo", "artist_or_song"]}
+
+    # Fast-path: map vague mood/tempo if present (pre-LLM)
     mapped = {}
     for phrase, mapped_val in VAGUE_TO_MOOD.items():
         if phrase in msg:
@@ -134,19 +140,6 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
             if mapped_val == "energetic":
                 mapped["tempo"] = "fast"
             break
-
-    # "no preference" explicit for each category
-    none_fields = {
-        "genre": any(term in msg for term in ["no genre", "any genre", "no preference for genre"]),
-        "mood": any(term in msg for term in ["no mood", "any mood", "no preference for mood"]),
-        "tempo": any(term in msg for term in ["no tempo", "any tempo", "no preference for tempo"]),
-        "artist_or_song": any(term in msg for term in ["no artist", "any artist", "no preference for artist", "no favorite artist", "anything"])
-    }
-    # Also cover general "anything/no preference/whatever" with minimal input
-    if any(is_none_like(word) for word in msg.split()):
-        if len(msg.split()) <= 3:
-            for key in none_fields:
-                none_fields[key] = True
 
     # --- PATCH: Robust LLM call and JSON extraction ---
     extracted = {}
@@ -184,7 +177,6 @@ Input: "{message}"
             text = response.json()["choices"][0]["message"]["content"]
 
             # --- PATCH: Robust JSON extraction ---
-            import re
             text = text.strip()
             if text.startswith("```"):
                 text = text.lstrip("`")
@@ -207,17 +199,17 @@ Input: "{message}"
         # If any explicit "none", just set them as None
         extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
 
-    # --- Patch: overwrite with mapped/none values ---
+    # --- Overwrite with mapped/none values and normalize ---
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if none_fields.get(key):
             extracted[key] = None
         if key in mapped and mapped[key]:
             extracted[key] = mapped[key]
-        # Always normalize any "none-like" phrases to None
         if extracted.get(key) and extracted[key].strip().lower() in NONE_LIKE:
             extracted[key] = None
 
     return {k: extracted.get(k, None) for k in ["genre", "mood", "tempo", "artist_or_song"]}
+
 
 
 def map_free_text_to_mood(text: str) -> str:
