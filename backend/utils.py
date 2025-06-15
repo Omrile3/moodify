@@ -19,6 +19,21 @@ NONE_LIKE = {
     "anything is fine", "i don't care", "i don't mind", "doesn't matter to me", "no specific preference", "no prefernce"
 }
 
+# --- PATCH: Improved mapping for vague terms ---
+VAGUE_TO_MOOD = {
+    "something good": "happy",
+    "good": "happy",
+    "positive": "happy",
+    "uplifting": "happy",
+    "something fun": "happy",
+    "something sad": "sad",
+    "more energy": "energetic",
+    "energy": "energetic",
+    "energetic": "energetic",
+    "calm": "calm",
+    "chill": "calm",
+}
+
 def convert_tempo_to_bpm(tempo_category: str) -> tuple:
     return {
         'slow': (0, 89),
@@ -104,28 +119,41 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
         "Content-Type": "application/json"
     }
 
-    lowered = message.lower()
-    similarity_phrases = ["similar to", "like", "sounds like", "vibe like", "in the style of", "reminiscent of", "same vibe as", "any artist"]
-    for phrase in similarity_phrases:
-        if phrase in lowered:
-            match = re.search(rf"{phrase} ([\w\s]+)", lowered)
-            if match:
-                candidate = match.group(1).strip().lower()
-                if candidate in GENRES:
-                    return {
-                        "genre": candidate,
-                        "mood": map_free_text_to_mood(message),
-                        "tempo": None,
-                        "artist_or_song": None
-                    }
-                return {
-                    "genre": None,
-                    "mood": map_free_text_to_mood(message),
-                    "tempo": None,
-                    "artist_or_song": candidate
-                }
+    msg = message.strip().lower()
 
-    prompt = f"""
+    # --- PATCH: catch "none/no preference/anything" directly for all fields ---
+    def is_none_like(val):
+        return val in NONE_LIKE or any(val.strip() == word for word in NONE_LIKE)
+
+    # Try to auto-map vague mood/tempo responses (fast path, pre-LLM)
+    mapped = {}
+    for phrase, mapped_val in VAGUE_TO_MOOD.items():
+        if phrase in msg:
+            if mapped_val in {"happy", "sad", "calm", "energetic"}:
+                mapped["mood"] = mapped_val
+            if mapped_val == "energetic":
+                mapped["tempo"] = "fast"
+            break
+
+    # "no preference" explicit for each category
+    none_fields = {
+        "genre": any(term in msg for term in ["no genre", "any genre", "no preference for genre"]),
+        "mood": any(term in msg for term in ["no mood", "any mood", "no preference for mood"]),
+        "tempo": any(term in msg for term in ["no tempo", "any tempo", "no preference for tempo"]),
+        "artist_or_song": any(term in msg for term in ["no artist", "any artist", "no preference for artist", "no favorite artist", "anything"])
+    }
+    # Also cover general "anything/no preference/whatever" with minimal input
+    if any(is_none_like(word) for word in msg.split()):
+        # If a short msg, assign "none" to all categories
+        if len(msg.split()) <= 3:
+            for key in none_fields:
+                none_fields[key] = True
+
+    # LLM fallback for complex extraction (but don't override explicit "none")
+    extracted = {}
+    if not any(none_fields.values()):
+        # Use LLM only if we don't have an explicit "none" field
+        prompt = f"""
 You are an AI that extracts music preferences from user input.
 Respond only in valid JSON with exactly these 4 keys: genre, mood, tempo, artist_or_song.
 If a value is not explicitly or implicitly stated, use null.
@@ -143,40 +171,42 @@ Examples:
 Input: "{message}"
 """
 
-    body = {
-        "model": "llama3-70b-8192",
-        "messages": [
-            {"role": "system", "content": "You extract music preferences from user messages in JSON, copying mood and genre words exactly unless a clear synonym is used. Do NOT reinterpret 'sad' or 'indie'."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.2,
-        "max_tokens": 250
-    }
-
-    try:
-        response = requests.post(GROQ_API_URL, headers=headers, json=body)
-        response.raise_for_status()
-        text = response.json()["choices"][0]["message"]["content"]
-        text = text[text.index("{"):text.rindex("}")+1]
-        parsed = json.loads(text)
-
-        # Treat invalid artist-like genres
-        if parsed["artist_or_song"] and parsed["artist_or_song"].lower() in GENRES:
-            parsed["genre"] = parsed["artist_or_song"].lower()
-            parsed["artist_or_song"] = None
-
-        # Normalize any "none-like" phrases
-        for key in ["genre", "mood", "tempo", "artist_or_song"]:
-            if parsed.get(key) and parsed[key].strip().lower() in NONE_LIKE:
-                parsed[key] = None
-
-        return {k: parsed.get(k, None) for k in ["genre", "mood", "tempo", "artist_or_song"]}
-
-    except Exception as e:
-        print("Groq Extraction Error:", e)
-        return {
-            "genre": None, "mood": None, "tempo": None, "artist_or_song": None
+        body = {
+            "model": "llama3-70b-8192",
+            "messages": [
+                {"role": "system", "content": "You extract music preferences from user messages in JSON, copying mood and genre words exactly unless a clear synonym is used. Do NOT reinterpret 'sad' or 'indie'."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.2,
+            "max_tokens": 250
         }
+
+        try:
+            response = requests.post(GROQ_API_URL, headers=headers, json=body)
+            response.raise_for_status()
+            text = response.json()["choices"][0]["message"]["content"]
+            text = text[text.index("{"):text.rindex("}")+1]
+            extracted = json.loads(text)
+        except Exception as e:
+            print("Groq Extraction Error:", e)
+            extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
+    else:
+        # If any explicit "none", just set them as None
+        extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
+
+    # --- Patch: overwrite with mapped/none values ---
+    for key in ["genre", "mood", "tempo", "artist_or_song"]:
+        if none_fields.get(key):
+            extracted[key] = None
+        if key in mapped and mapped[key]:
+            extracted[key] = mapped[key]
+        # Always normalize any "none-like" phrases to None
+        if extracted.get(key) and extracted[key].strip().lower() in NONE_LIKE:
+            extracted[key] = None
+
+    return {k: extracted.get(k, None) for k in ["genre", "mood", "tempo", "artist_or_song"]}
+
+# ... rest of file unchanged ...
 
 def map_free_text_to_mood(text: str) -> str:
     text = text.lower()
@@ -214,11 +244,7 @@ def precompute_recommendation_map(df: pd.DataFrame) -> dict:
         index_map[key].append(row)
     return index_map
 
-### ------------- AI-DRIVEN NEXT MESSAGE ---------------
 def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
-    """
-    Use Llama3 to decide what to ask next or recommend, based on session state and user input.
-    """
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -230,13 +256,21 @@ def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
             known_prefs.append(f"{k}: {v}")
     prefs_str = ", ".join(known_prefs) if known_prefs else "none yet"
 
+    # --- PATCH: add no_pref flags info for LLM ---
+    no_prefs = []
+    for k in ["genre", "mood", "tempo", "artist_or_song"]:
+        if session.get(f"no_pref_{k}", False):
+            no_prefs.append(k)
+    no_pref_str = ", ".join(no_prefs) if no_prefs else "none"
+
     prompt = f"""
 You are Moodify, a helpful, friendly music AI. You are helping a user choose a song.
 Here is what you know about the user's preferences so far: {prefs_str}.
+User has said they have no preference for: {no_pref_str}.
 
 Recent user message: "{last_user_message}"
 
-If you are still missing genre, mood, tempo, or artist, ask a short (1 line), friendly follow-up question about the next missing thing. If the user says they don't have any preference, do not ask again on that subject   .
+If you are still missing genre, mood, tempo, or artist, ask a short (1 line), friendly follow-up question about the next missing thing, unless user said they have no preference for that (don't ask again if so).
 When you have enough info, say your recommended song in one concise (one line), enthusiastic sentence, then ask the user if they like it.
 genre can be any of: {', '.join(GENRES)}.
 mood can be: sad, energetic, calm, happy.
@@ -244,7 +278,7 @@ tempo can be: slow, medium, fast.
 artist_or_song can be any artist or song name.
 
 - NEVER ask the user the same thing twice or to confirm the same preference repeatedly.
-- If you already know at least two out of genre, mood, and tempo, STOP asking clarifying questions and RECOMMEND a song. 
+- If you already know at least two out of genre, mood, and tempo, STOP asking clarifying questions and RECOMMEND a song.
 - If the user says "yes", "no", or repeats their preference, just move forward or adjust accordingly.
 - You may ask up to 2 follow-up questions if mood or genre is still missing, but never repeat yourself.
 - After 3 clarifying messages, you must always recommend a song, even if something is missing.
@@ -252,7 +286,7 @@ artist_or_song can be any artist or song name.
 
 If the user asks to change something, help them do so.
 
-Be as conversational as possible, do not use a fixed script. Reply with only your message, do not restate the session data. 
+Be as conversational as possible, do not use a fixed script. Reply with only your message, do not restate the session data.
 Ask a maximum of 4 questions before recommending a song.
 """
     body = {
