@@ -52,35 +52,21 @@ def recommend(preference: PreferenceInput):
 
     # Always extract new info
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
-
-    # --- PATCH: Set "no_pref_*" flags if user said "no preference" ---
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if extracted.get(key) is None and user_message.strip().lower() in ["no", "none", "no preference", "nothing", "any", "whatever", "anything", "doesn't matter", "no specific preference"]:
             memory.update_session(preference.session_id, f"no_pref_{key}", True)
         elif extracted.get(key):
-            # If actual value, update value and clear no_pref flag
             memory.update_session(preference.session_id, key, extracted[key])
             memory.update_session(preference.session_id, f"no_pref_{key}", False)
 
-    # Track followup logic only for things not marked as "no preference"
     session = memory.get_session(preference.session_id)
-    required_keys = ["genre", "mood", "tempo", "artist_or_song"]
-
-    # If the user enters a new preference, reset the followup counter.
-    if any(extracted.get(k) for k in required_keys):
-        memory.update_session(preference.session_id, "followup_count", 0)
-
-    # Count how many usable preferences (not None and not no_pref)
-    real_prefs = [
-        k for k in ["genre", "mood", "tempo"]
-        if session.get(k) is not None and not session.get(f"no_pref_{k}", False)
+    all_fields = ["genre", "mood", "tempo", "artist_or_song"]
+    fields_completed = [
+        k for k in all_fields if session.get(k) is not None or session.get(f"no_pref_{k}", False)
     ]
 
-    # If at least two of (genre, mood, tempo) are present, recommend immediately!
-    # Or if all preferences either set or explicitly "no_pref"
-    no_pref_counts = sum(1 for k in ["genre", "mood", "tempo", "artist_or_song"] if session.get(f"no_pref_{k}", False))
-    filled_counts = sum(1 for k in ["genre", "mood", "tempo", "artist_or_song"] if session.get(k))
-    if len(real_prefs) >= 2 or (no_pref_counts + filled_counts) >= 4:
+    # Only recommend if ALL 4 are set or "no_pref"
+    if len(fields_completed) == 4:
         song = recommend_engine(session)
         if not song or song['song'] == "N/A":
             return {
@@ -92,12 +78,11 @@ def recommend(preference: PreferenceInput):
         memory.update_session(preference.session_id, "followup_count", 0)
         return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
     else:
-        # --- PATCH: Stop prompting about fields marked "no_pref_*" ---
         followup_count = session.get("followup_count", 0)
-        if followup_count >= 3:
-            # After 3, recommend anyway, even with missing prefs
-            fake_session = {k: session.get(k) for k in required_keys}
-            for k in required_keys:
+        if followup_count >= 4:
+            # Recommend with whatever info is present, fallback logic
+            fake_session = {k: session.get(k) for k in all_fields}
+            for k in all_fields:
                 if not fake_session[k]:
                     fake_session[k] = "any"
             song = recommend_engine(fake_session)
