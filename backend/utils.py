@@ -6,7 +6,8 @@ import pandas as pd
 import base64
 import os
 
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL = "gpt-4o"  # You can use "gpt-4" or "gpt-4-1106-preview" if you prefer
 
 GENRES = {
     "pop", "rock", "classical", "jazz", "metal", "electronic", "hip hop", "rap",
@@ -21,7 +22,6 @@ NONE_LIKE = {
     "anything is fine", "i don't care", "i don't mind", "doesn't matter to me", "no specific preference", "no prefernce"
 }
 
-# --- PATCH: Improved mapping for vague terms ---
 VAGUE_TO_MOOD = {
     "something good": "happy",
     "good": "happy",
@@ -52,7 +52,6 @@ def bpm_to_tempo_category(bpm: float) -> str:
         return "fast"
 
 def fuzzy_match_word(word, options, cutoff=0.75):
-    """Returns the closest match for a word from options, if similar enough."""
     if not word:
         return None
     matches = difflib.get_close_matches(word.lower(), options, n=1, cutoff=cutoff)
@@ -104,7 +103,7 @@ Don't suggest alternatives or explain why. Mention only this one song.
 """
 
     body = {
-        "model": "llama3-70b-8192",
+        "model": OPENAI_MODEL,
         "messages": [
             {"role": "system", "content": "You are a helpful music assistant. Respond in under 1.5 sentences."},
             {"role": "user", "content": prompt}
@@ -114,14 +113,14 @@ Don't suggest alternatives or explain why. Mention only this one song.
     }
 
     try:
-        response = requests.post(GROQ_API_URL, headers=headers, json=body)
+        response = requests.post(OPENAI_API_URL, headers=headers, json=body)
         response.raise_for_status()
         message = response.json()["choices"][0]["message"]["content"].strip()
         if spotify_url:
             message += f' 🎵 <a href="{spotify_url}" target="_blank">Listen on Spotify</a>'
         return message
     except Exception as e:
-        print("Groq Chat Error:", e)
+        print("OpenAI Chat Error:", e)
         return f"🎵 Here’s a great track: '{song}' by {artist}." + (f' <a href="{spotify_url}" target="_blank">Listen</a>' if spotify_url else "")
 
 def extract_preferences_from_message(message: str, api_key: str) -> dict:
@@ -132,17 +131,14 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
 
     msg = message.strip().lower()
 
-    # --- PATCH: Robust "none-like" phrase detection ---
     def contains_none_like(val):
         for none_str in NONE_LIKE:
             if f" {none_str} " in f" {val} ":
                 return True
         return False
 
-    # If message contains ANY none-like, mark ALL as "no preference"
     none_fields = {field: contains_none_like(msg) for field in ["genre", "mood", "tempo", "artist_or_song"]}
 
-    # Fast-path: map vague mood/tempo if present (pre-LLM)
     mapped = {}
     for phrase, mapped_val in VAGUE_TO_MOOD.items():
         if phrase in msg:
@@ -152,7 +148,6 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
                 mapped["tempo"] = "fast"
             break
 
-    # --- PATCH: Robust LLM call and JSON extraction ---
     extracted = {}
     if not any(none_fields.values()):
         prompt = f"""
@@ -173,7 +168,7 @@ Examples:
 Input: "{message}"
 """
         body = {
-            "model": "llama3-70b-8192",
+            "model": OPENAI_MODEL,
             "messages": [
                 {"role": "system", "content": "You extract music preferences from user messages in JSON, copying mood and genre words exactly unless a clear synonym is used. Do NOT reinterpret 'sad' or 'indie'."},
                 {"role": "user", "content": prompt}
@@ -183,11 +178,10 @@ Input: "{message}"
         }
 
         try:
-            response = requests.post(GROQ_API_URL, headers=headers, json=body)
+            response = requests.post(OPENAI_API_URL, headers=headers, json=body)
             response.raise_for_status()
             text = response.json()["choices"][0]["message"]["content"]
 
-            # --- PATCH: Robust JSON extraction ---
             text = text.strip()
             if text.startswith("```"):
                 text = text.lstrip("`")
@@ -198,19 +192,17 @@ Input: "{message}"
                 try:
                     extracted = json.loads(json_text)
                 except Exception as e:
-                    print("Groq Extraction Error (inner):", e, "| Offending text:", repr(json_text))
+                    print("OpenAI Extraction Error (inner):", e, "| Offending text:", repr(json_text))
                     extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
             else:
-                print("Groq Extraction Error: Could not find JSON object in:", repr(text))
+                print("OpenAI Extraction Error: Could not find JSON object in:", repr(text))
                 extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
         except Exception as e:
-            print("Groq Extraction Error:", e)
+            print("OpenAI Extraction Error:", e)
             extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
     else:
-        # If any explicit "none", just set them as None
         extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
 
-    # --- Overwrite with mapped/none values and normalize, plus typo correction ---
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if none_fields.get(key):
             extracted[key] = None
@@ -220,7 +212,6 @@ Input: "{message}"
             val = extracted[key].strip().lower()
             if val in NONE_LIKE:
                 extracted[key] = None
-            # Fuzzy match mood and genre typos
             if key == "mood":
                 corrected = fuzzy_match_word(val, MOODS)
                 if corrected:
@@ -280,7 +271,6 @@ def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
             known_prefs.append(f"{k}: {v}")
     prefs_str = ", ".join(known_prefs) if known_prefs else "none yet"
 
-    # --- PATCH: add no_pref flags info for LLM ---
     no_prefs = []
     for k in ["genre", "mood", "tempo", "artist_or_song"]:
         if session.get(f"no_pref_{k}", False):
@@ -314,7 +304,7 @@ Be as conversational as possible, do not use a fixed script. Reply with only you
 Ask a maximum of 4 questions before recommending a song.
 """
     body = {
-        "model": "llama3-70b-8192",
+        "model": OPENAI_MODEL,
         "messages": [
             {"role": "system", "content": "You are a friendly AI music assistant."},
             {"role": "user", "content": prompt}
@@ -323,9 +313,9 @@ Ask a maximum of 4 questions before recommending a song.
         "max_tokens": 200
     }
     try:
-        response = requests.post(GROQ_API_URL, headers=headers, json=body)
+        response = requests.post(OPENAI_API_URL, headers=headers, json=body)
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        print("Groq next_ai_message error:", e)
+        print("OpenAI next_ai_message error:", e)
         return "What are you in the mood for today?"

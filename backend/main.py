@@ -11,9 +11,9 @@ from recommender_eng import recommend_engine
 from memory import SessionMemory
 from utils import generate_chat_response, extract_preferences_from_message, GENRES, next_ai_message
 
-# Load Groq key
+# Load OpenAI key
 load_dotenv()
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 app = FastAPI()
 memory = SessionMemory()
@@ -55,7 +55,7 @@ def recommend(preference: PreferenceInput):
         return {"response": None}
 
     # Always extract new info
-    extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
+    extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if extracted.get(key) is None and user_message.strip().lower() in [
             "no", "none", "no preference", "nothing", "any", "whatever", "anything", "doesn't matter", "no specific preference"
@@ -75,7 +75,7 @@ def recommend(preference: PreferenceInput):
     ]
     artist_done = session.get("artist_or_song") is not None or session.get("no_pref_artist_or_song", False)
 
-    # If at least two of (genre, mood, tempo) are provided, recommend now!
+    # If at least three of (genre, mood, tempo) are provided, recommend now!
     if len(prefs_or_no) >= 3:
         song = recommend_engine(session)
         if not song or song.get('song') == "N/A":
@@ -83,7 +83,7 @@ def recommend(preference: PreferenceInput):
                 "response": "<span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
             }
         memory.update_last_song(preference.session_id, song['song'], song['artist'])
-        gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
+        gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
         memory.update_session(preference.session_id, "awaiting_feedback", True)
         memory.update_session(preference.session_id, "followup_count", 0)
         return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
@@ -101,11 +101,11 @@ def recommend(preference: PreferenceInput):
                     "response": "<span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
                 }
             memory.update_last_song(preference.session_id, song['song'], song['artist'])
-            gpt_message = generate_chat_response(song, fake_session, GROQ_API_KEY)
+            gpt_message = generate_chat_response(song, fake_session, OPENAI_API_KEY)
             memory.update_session(preference.session_id, "followup_count", 0)
             memory.update_session(preference.session_id, "awaiting_feedback", True)
             return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you? Say no for another rec, or yes to keep it."}
-        ai_message = next_ai_message(session, user_message, GROQ_API_KEY)
+        ai_message = next_ai_message(session, user_message, OPENAI_API_KEY)
         memory.update_session(preference.session_id, "followup_count", followup_count + 1)
         return {"response": f"<span style='color:green'>{ai_message}</span>"}
 
@@ -144,7 +144,7 @@ def handle_command(command_input: CommandInput):
         if not song or song.get('song') == "N/A":
             return {"response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"}
         memory.update_last_song(session_id, song['song'], song['artist'])
-        gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
+        gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
         memory.update_session(session_id, "awaiting_feedback", True)
         return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
 
@@ -159,7 +159,7 @@ def handle_command(command_input: CommandInput):
                     "response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"
                 }
             memory.update_last_song(session_id, song['song'], song['artist'])
-            gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
+            gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
             memory.update_session(session_id, "awaiting_feedback", True)
             return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
         # If "yes", close feedback loop
