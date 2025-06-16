@@ -2,6 +2,35 @@ const backendUrl = "https://moodify-backend-uj8d.onrender.com"; // Update if tes
 
 const sessionId = generateSessionId();
 
+// Monkey-patch window.handleBotReply so backend HTML buttons always work!
+window.handleBotReply = function (msg) {
+  appendUserMessage(msg, true);
+  showTypingIndicator();
+
+  fetch(`${backendUrl}/command`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, command: msg })
+  })
+    .then(res => res.json())
+    .then(data => {
+      const delay = calculateTypingDelay(data.response);
+      setTimeout(() => {
+        hideTypingIndicator();
+        appendBotMessage(data.response || "Something went wrong.");
+        updatePreferencesPanel();
+      }, delay);
+    })
+    .catch(error => {
+      console.error("API error:", error);
+      hideTypingIndicator();
+      appendBotMessage("⚠️ Sorry, something went wrong while contacting Moodify.");
+      updatePreferencesPanel();
+    });
+};
+
+// --- Existing code ---
+
 window.sendMessage = function () {
   const inputField = document.getElementById("user-input");
   const message = inputField.value.trim();
@@ -50,7 +79,7 @@ window.onload = () => {
     .then(res => res.json())
     .then(data => {
       appendBotMessage(data.response);
-      updatePreferencesPanel(); // Always get up-to-date preferences at start
+      updatePreferencesPanel();
     })
     .catch(error => {
       console.error("API error:", error);
@@ -70,16 +99,40 @@ document.getElementById("user-input").addEventListener("keypress", function (eve
   }
 });
 
-function appendUserMessage(msg) {
+function appendUserMessage(msg, isButton) {
   const chatBox = document.getElementById("chat-box");
-  chatBox.innerHTML += `<p><strong>You:</strong> ${msg}</p>`;
+  // If message is from a button, don't prepend "You:"
+  if (isButton) {
+    chatBox.innerHTML += `<p><strong>You:</strong> <span class="user-btn-msg">${msg}</span></p>`;
+  } else {
+    chatBox.innerHTML += `<p><strong>You:</strong> ${msg}</p>`;
+  }
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 function appendBotMessage(msg) {
   const chatBox = document.getElementById("chat-box");
+  // Render any HTML from backend (for buttons and links)
   chatBox.innerHTML += `<p class="green-response"><strong>Moodify:</strong> ${msg}</p>`;
   chatBox.scrollTop = chatBox.scrollHeight;
+
+  // Re-activate all buttons if backend rendered them
+  setTimeout(activateAllBackendButtons, 0);
+}
+
+// This ensures event listeners work for dynamically rendered backend buttons (in case browser disables inline JS)
+function activateAllBackendButtons() {
+  const buttons = document.querySelectorAll('button[onclick^="window.handleBotReply"]');
+  buttons.forEach(btn => {
+    // Only patch if not already patched (avoid multiple listeners)
+    if (!btn.dataset.patched) {
+      const cmdMatch = btn.getAttribute('onclick').match(/window\.handleBotReply\(['"](.+?)['"]\)/);
+      if (cmdMatch) {
+        btn.onclick = function () { window.handleBotReply(cmdMatch[1]); };
+        btn.dataset.patched = "true";
+      }
+    }
+  });
 }
 
 function showTypingIndicator() {
@@ -97,6 +150,7 @@ function hideTypingIndicator() {
 }
 
 function calculateTypingDelay(text) {
+  if (!text) return 500;
   const wordCount = text.split(" ").length;
   const delayPerWord = 120; // ms
   return Math.min(3000, wordCount * delayPerWord);

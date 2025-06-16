@@ -7,7 +7,7 @@ import base64
 import os
 
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-OPENAI_MODEL = "gpt-4o"  # You can use "gpt-4" or "gpt-4-1106-preview" if you prefer
+OPENAI_MODEL = "gpt-4o"  # Or "gpt-4-1106-preview", etc.
 
 GENRES = {
     "pop", "rock", "classical", "jazz", "metal", "electronic", "hip hop", "rap",
@@ -116,12 +116,17 @@ Don't suggest alternatives or explain why. Mention only this one song.
         response = requests.post(OPENAI_API_URL, headers=headers, json=body)
         response.raise_for_status()
         message = response.json()["choices"][0]["message"]["content"].strip()
-        if spotify_url:
+        # Only add Spotify link if it looks valid
+        if spotify_url and isinstance(spotify_url, str) and "open.spotify.com/track/" in spotify_url and len(spotify_url) > 35:
             message += f' 🎵 <a href="{spotify_url}" target="_blank">Listen on Spotify</a>'
         return message
     except Exception as e:
         print("OpenAI Chat Error:", e)
-        return f"🎵 Here’s a great track: '{song}' by {artist}." + (f' <a href="{spotify_url}" target="_blank">Listen</a>' if spotify_url else "")
+        fallback = f"🎵 Here’s a great track: '{song}' by {artist}."
+        if spotify_url and isinstance(spotify_url, str) and "open.spotify.com/track/" in spotify_url and len(spotify_url) > 35:
+            fallback += f' <a href="{spotify_url}" target="_blank">Listen</a>'
+        return fallback
+
 
 def extract_preferences_from_message(message: str, api_key: str) -> dict:
     headers = {
