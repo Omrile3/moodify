@@ -15,6 +15,19 @@ from utils import generate_chat_response, extract_preferences_from_message, GENR
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# --- Buttons HTML ---
+BUTTONS_HTML = """
+<br>
+<div style='margin-top:10px;display:flex;gap:8px;flex-wrap:wrap'>
+  <button onclick="window.handleBotReply('yes')">👍 Yes, I love it!</button>
+  <button onclick="window.handleBotReply('no')">🔄 Recommend another</button>
+  <button onclick="window.handleBotReply('change mood')">Change mood</button>
+  <button onclick="window.handleBotReply('change genre')">Change genre</button>
+  <button onclick="window.handleBotReply('change artist')">Change artist</button>
+  <button onclick="window.handleBotReply('change tempo')">Change tempo</button>
+</div>
+"""
+
 app = FastAPI()
 memory = SessionMemory()
 
@@ -73,7 +86,6 @@ def recommend(preference: PreferenceInput):
         k for k in ["genre", "mood", "tempo"]
         if session.get(k) is not None or session.get(f"no_pref_{k}", False)
     ]
-    artist_done = session.get("artist_or_song") is not None or session.get("no_pref_artist_or_song", False)
 
     # If at least three of (genre, mood, tempo) are provided, recommend now!
     if len(prefs_or_no) >= 3:
@@ -86,7 +98,7 @@ def recommend(preference: PreferenceInput):
         gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
         memory.update_session(preference.session_id, "awaiting_feedback", True)
         memory.update_session(preference.session_id, "followup_count", 0)
-        return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
+        return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
     else:
         followup_count = session.get("followup_count", 0)
         if followup_count >= 4:
@@ -104,7 +116,7 @@ def recommend(preference: PreferenceInput):
             gpt_message = generate_chat_response(song, fake_session, OPENAI_API_KEY)
             memory.update_session(preference.session_id, "followup_count", 0)
             memory.update_session(preference.session_id, "awaiting_feedback", True)
-            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you? Say no for another rec, or yes to keep it."}
+            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
         ai_message = next_ai_message(session, user_message, OPENAI_API_KEY)
         memory.update_session(preference.session_id, "followup_count", followup_count + 1)
         return {"response": f"<span style='color:green'>{ai_message}</span>"}
@@ -121,7 +133,7 @@ def handle_command(command_input: CommandInput):
             # Clear the current preference and ask for new value
             field = "artist_or_song" if pref == "artist" else pref
             memory.update_session(session_id, field, None)
-            memory.update_session(session_id, f"no_pref_{field}", False)  # allow user to re-specify
+            memory.update_session(session_id, f"no_pref_{field}", False)
             memory.update_session(session_id, "awaiting_feedback", False)
             return {
                 "response": f"<span style='color:green'>Sure! What {pref} would you like instead?</span>"
@@ -146,28 +158,33 @@ def handle_command(command_input: CommandInput):
         memory.update_last_song(session_id, song['song'], song['artist'])
         gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
         memory.update_session(session_id, "awaiting_feedback", True)
-        return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
+        return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
 
     # --- 4. Handle feedback after recommendation ---
     if session.get("awaiting_feedback"):
         # If "no", keep recommending
         if any(word in cmd for word in ["no", "didn't", "not really", "did not", "nah", "not a good fit", "not fit", "try again"]):
-            session["history"].append((session.get("last_song"), session.get("last_artist")))
+            last_song = session.get("last_song")
+            last_artist = session.get("last_artist")
+            if last_song and last_artist:
+                if (last_song, last_artist) not in session["history"]:
+                    session["history"].append((last_song, last_artist))
             song = recommend_engine(session)
             if not song or song.get('song') == "N/A":
+                memory.update_session(session_id, "awaiting_feedback", False)
                 return {
-                    "response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"
+                    "response": "<span style='color:green'>I couldn’t find another new song. Want to change mood, genre, artist, or tempo?</span>"
                 }
             memory.update_last_song(session_id, song['song'], song['artist'])
             gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
             memory.update_session(session_id, "awaiting_feedback", True)
-            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Was that a good fit for you?"}
-        # If "yes", close feedback loop
+            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
+        # If "yes", thank and end loop
         if any(word in cmd for word in ["yes", "love", "liked", "good", "great", "perfect", "awesome", "sure"]):
             memory.update_session(session_id, "awaiting_feedback", False)
             return {
                 "response": (
-                    "😊 <span style='color:green'>Great! If you want to hear something different, just reset the chat.</span>"
+                    "😊 <span style='color:green'>Great! Glad you liked it. If you want to hear something else, just type 'reset' to start again any time!</span>"
                 )
             }
 
