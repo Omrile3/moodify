@@ -13,6 +13,8 @@ GENRES = {
     "r&b", "lofi", "latin", "folk", "reggae", "country", "blues", "indie"
 }
 
+MOODS = {"happy", "sad", "energetic", "calm"}
+
 NONE_LIKE = {
     "no", "none", "nah", "not really", "nothing", "any", "anything", "whatever",
     "doesn't matter", "does not matter", "no preference", "up to you",
@@ -48,6 +50,15 @@ def bpm_to_tempo_category(bpm: float) -> str:
         return "medium"
     else:
         return "fast"
+
+def fuzzy_match_word(word, options, cutoff=0.75):
+    """Returns the closest match for a word from options, if similar enough."""
+    if not word:
+        return None
+    matches = difflib.get_close_matches(word.lower(), options, n=1, cutoff=cutoff)
+    if matches:
+        return matches[0]
+    return None
 
 def fuzzy_match_artist_song(df, query: str):
     if not isinstance(query, str):
@@ -199,18 +210,27 @@ Input: "{message}"
         # If any explicit "none", just set them as None
         extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
 
-    # --- Overwrite with mapped/none values and normalize ---
+    # --- Overwrite with mapped/none values and normalize, plus typo correction ---
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if none_fields.get(key):
             extracted[key] = None
         if key in mapped and mapped[key]:
             extracted[key] = mapped[key]
-        if extracted.get(key) and extracted[key].strip().lower() in NONE_LIKE:
-            extracted[key] = None
+        if extracted.get(key) and isinstance(extracted[key], str):
+            val = extracted[key].strip().lower()
+            if val in NONE_LIKE:
+                extracted[key] = None
+            # Fuzzy match mood and genre typos
+            if key == "mood":
+                corrected = fuzzy_match_word(val, MOODS)
+                if corrected:
+                    extracted[key] = corrected
+            if key == "genre":
+                corrected = fuzzy_match_word(val, GENRES)
+                if corrected:
+                    extracted[key] = corrected
 
     return {k: extracted.get(k, None) for k in ["genre", "mood", "tempo", "artist_or_song"]}
-
-
 
 def map_free_text_to_mood(text: str) -> str:
     text = text.lower()
