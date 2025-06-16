@@ -30,17 +30,15 @@ df = df.dropna(subset=features)
 scaler = MinMaxScaler()
 df[features] = scaler.fit_transform(df[features])
 
-# Mood vectors
+# Mood vectors and recommendation map (unchanged)
 MOOD_VECTORS = {
     "happy": [0.9, 0.8, 0.7, 0.2, 0.6],
     "sad": [0.2, 0.3, 0.2, 0.6, 0.4],
     "energetic": [0.7, 0.9, 0.8, 0.1, 0.8],
     "calm": [0.5, 0.4, 0.3, 0.7, 0.5]
 }
-
 recommendation_map = precompute_recommendation_map(df)
 
-# --- Weighted recommendation logic ---
 SAD_MOODS = {"sad", "melancholy", "down", "emotional", "blue", "heartbreak", "gloomy"}
 HAPPY_MOODS = {"happy", "joy", "energetic", "upbeat", "party", "celebrate", "excited"}
 UPBEAT_WORDS = {"upbeat", "party", "dance", "energetic", "celebrate", "hyped", "intense"}
@@ -52,24 +50,20 @@ def normalize(val):
     return val
 
 def weighted_score(row, prefs):
-    # Mood, genre, tempo, artist
+    # Your existing logic here...
     mood = normalize(row.get('mode_category', '')) if 'mode_category' in row else ''
     genre = normalize(row.get('playlist_genre', '')) if 'playlist_genre' in row else ''
     tempo = normalize(row.get('tempo_category', '')) if 'tempo_category' in row else ''
     artist = normalize(row.get('track_artist', '')) if 'track_artist' in row else ''
     track_name = normalize(row.get('track_name', '')) if 'track_name' in row else ''
-    # Extra: allow fallback to CSV field 'mood' if exists
     if not mood and 'mood' in row:
         mood = normalize(row.get('mood', ''))
 
     score = 0
-
-    # GENRE + MOOD + TEMPO: Heavy weights
     if prefs.get("genre"):
         pgenre = normalize(prefs["genre"])
         if pgenre and pgenre in genre:
             score += 8
-
     if prefs.get("mood"):
         pmood = normalize(prefs["mood"])
         if pmood and pmood in mood:
@@ -77,10 +71,9 @@ def weighted_score(row, prefs):
         elif pmood in SAD_MOODS and any(x in mood for x in SAD_MOODS):
             score += 8
         elif pmood in SAD_MOODS and any(x in mood for x in HAPPY_MOODS):
-            score -= 10  # Major penalty if sad mood requested but song is happy/upbeat
+            score -= 10
         elif pmood and pmood in mood:
             score += 3
-
     if prefs.get("tempo"):
         ptempo = normalize(prefs["tempo"])
         if ptempo and ptempo in tempo:
@@ -88,33 +81,25 @@ def weighted_score(row, prefs):
         elif ptempo in SLOW_WORDS and any(x in tempo for x in SLOW_WORDS):
             score += 8
         elif ptempo in SLOW_WORDS and any(x in tempo for x in UPBEAT_WORDS):
-            score -= 5  # Penalty for slow preference but upbeat song
+            score -= 5
         elif ptempo and ptempo in tempo:
             score += 2
-
-    # Artist: Bonus only if matches
     if prefs.get("artist_or_song"):
         query = normalize(prefs["artist_or_song"])
         if query and (query in artist or query in track_name):
-            score += 2  # Bonus only
-
-    # Popularity as tiebreaker
+            score += 2
     pop_val = row.get('track_popularity', row.get('popularity', None))
     if pop_val is not None and not pd.isnull(pop_val):
         try:
             score += float(pop_val) / 100.0
         except Exception:
             pass
-
-    # Extra exclusions for sad/slow
     if prefs.get("mood") and normalize(prefs["mood"]) in SAD_MOODS:
         if any(w in mood for w in HAPPY_MOODS | UPBEAT_WORDS):
             score -= 7
-
     if prefs.get("tempo") and normalize(prefs["tempo"]) in SLOW_WORDS:
         if any(w in tempo for w in UPBEAT_WORDS):
             score -= 3
-
     return score
 
 def recommend_engine(preferences: dict):
@@ -144,7 +129,14 @@ def recommend_engine(preferences: dict):
 
         return local_df
 
-    # Detect similarity intent
+    # Exclude songs in history from candidates
+    def exclude_history(df, history):
+        if not history:
+            return df
+        return df[
+            ~df.apply(lambda row: (row["track_name"], row["track_artist"]) in history, axis=1)
+        ]
+
     exclude_artist = None
     if preferences.get("artist_or_song"):
         lowered = preferences["artist_or_song"].lower()
@@ -160,12 +152,15 @@ def recommend_engine(preferences: dict):
                     break
 
     filtered = apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=exclude_artist)
+    history = preferences.get("history", [])
+    filtered = exclude_history(filtered, history)
     if filtered.empty:
         filtered = apply_filters(preferences, filter_tempo=False, filter_genre=True, exclude_artist=exclude_artist)
+        filtered = exclude_history(filtered, history)
     if filtered.empty:
         filtered = apply_filters(preferences, filter_tempo=False, filter_genre=False, exclude_artist=exclude_artist)
+        filtered = exclude_history(filtered, history)
 
-    history = preferences.get("history", [])
     top = None
 
     # --- Scoring logic ---

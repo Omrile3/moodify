@@ -187,8 +187,28 @@ def handle_command(command_input: CommandInput):
                     "😊 <span style='color:green'>Great! Glad you liked it. If you want to hear something else, just type 'reset' to start again any time!</span>"
                 )
             }
+        # --- 5. Try to extract new preferences from free text during feedback ---
+        extracted = extract_preferences_from_message(cmd, OPENAI_API_KEY)
+        extracted_any = any(extracted.get(k) for k in ["genre", "mood", "tempo", "artist_or_song"])
+        if extracted_any:
+            for key in ["genre", "mood", "tempo", "artist_or_song"]:
+                if extracted.get(key):
+                    memory.update_session(session_id, key, extracted[key])
+            # Now recommend a new song using updated preferences
+            song = recommend_engine(session)
+            if not song or song.get('song') == "N/A":
+                memory.update_session(session_id, "awaiting_feedback", False)
+                return {
+                    "response": "<span style='color:green'>I couldn’t find another new song. Want to change mood, genre, artist, or tempo?</span>"
+                }
+            memory.update_last_song(session_id, song['song'], song['artist'])
+            gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
+            memory.update_session(session_id, "awaiting_feedback", True)
+            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
+        # Otherwise, fall back to generic help:
+        return {"response": "<span style='color:green'>You can say 'another one', 'change genre', 'change artist', 'change mood', 'change tempo', or 'reset' to start over.</span>"}
 
-    # --- 5. If user says what they want changed, but is vague, ask for clarification ---
+    # --- 6. If user says what they want changed, but is vague, ask for clarification ---
     if "change" in cmd or "something else" in cmd or "different" in cmd:
         return {
             "response": (
@@ -196,7 +216,7 @@ def handle_command(command_input: CommandInput):
             )
         }
 
-    # --- 6. Generic help ---
+    # --- 7. Generic help for anything else ---
     return {"response": "<span style='color:green'>You can say 'another one', 'change genre', 'change artist', 'change mood', 'change tempo', or 'reset' to start over.</span>"}
 
 @app.post("/reset")
