@@ -57,7 +57,9 @@ def recommend(preference: PreferenceInput):
     # Always extract new info
     extracted = extract_preferences_from_message(user_message, GROQ_API_KEY)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        if extracted.get(key) is None and user_message.strip().lower() in ["no", "none", "no preference", "nothing", "any", "whatever", "anything", "doesn't matter", "no specific preference"]:
+        if extracted.get(key) is None and user_message.strip().lower() in [
+            "no", "none", "no preference", "nothing", "any", "whatever", "anything", "doesn't matter", "no specific preference"
+        ]:
             memory.update_session(preference.session_id, f"no_pref_{key}", True)
         elif extracted.get(key):
             memory.update_session(preference.session_id, key, extracted[key])
@@ -65,14 +67,18 @@ def recommend(preference: PreferenceInput):
 
     session = memory.get_session(preference.session_id)
     all_fields = ["genre", "mood", "tempo", "artist_or_song"]
-    fields_completed = [
-        k for k in all_fields if session.get(k) is not None or session.get(f"no_pref_{k}", False)
-    ]
 
-    # Only recommend if ALL 4 are set or "no_pref"
-    if len(fields_completed) == 4:
+    # Identify which of the three main prefs are done or skipped
+    prefs_or_no = [
+        k for k in ["genre", "mood", "tempo"]
+        if session.get(k) is not None or session.get(f"no_pref_{k}", False)
+    ]
+    artist_done = session.get("artist_or_song") is not None or session.get("no_pref_artist_or_song", False)
+
+    # If at least two of (genre, mood, tempo) are provided, recommend now!
+    if len(prefs_or_no) >= 3:
         song = recommend_engine(session)
-        if not song or song['song'] == "N/A":
+        if not song or song.get('song') == "N/A":
             return {
                 "response": "<span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
             }
@@ -90,7 +96,7 @@ def recommend(preference: PreferenceInput):
                 if not fake_session[k]:
                     fake_session[k] = "any"
             song = recommend_engine(fake_session)
-            if not song or song['song'] == "N/A":
+            if not song or song.get('song') == "N/A":
                 return {
                     "response": "<span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
                 }
@@ -135,7 +141,7 @@ def handle_command(command_input: CommandInput):
     if any(word in cmd for word in ["another", "again", "next one"]):
         session["history"] = [(session.get("last_song"), session.get("last_artist"))]
         song = recommend_engine(session)
-        if not song or song['song'] == "N/A":
+        if not song or song.get('song') == "N/A":
             return {"response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"}
         memory.update_last_song(session_id, song['song'], song['artist'])
         gpt_message = generate_chat_response(song, session, GROQ_API_KEY)
@@ -148,7 +154,7 @@ def handle_command(command_input: CommandInput):
         if any(word in cmd for word in ["no", "didn't", "not really", "did not", "nah", "not a good fit", "not fit", "try again"]):
             session["history"].append((session.get("last_song"), session.get("last_artist")))
             song = recommend_engine(session)
-            if not song or song['song'] == "N/A":
+            if not song or song.get('song') == "N/A":
                 return {
                     "response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"
                 }
