@@ -112,15 +112,26 @@ function appendUserMessage(msg, isButton) {
 
 function appendBotMessage(msg) {
   const chatBox = document.getElementById("chat-box");
-  // Render any HTML from backend (for buttons and links)
-  chatBox.innerHTML += `<p class="green-response"><strong>Moodify:</strong> ${msg}</p>`;
+  let html = `<p class="green-response"><strong>Moodify:</strong> ${msg}</p>`;
+
+  // --- Spotify Embed Patch ---
+  // Try to find a Spotify track URL in the message
+  const spotifyMatch = msg && msg.match(/https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
+  if (spotifyMatch) {
+    const trackId = spotifyMatch[1];
+    html += `
+      <div class="spotify-embed">
+        <iframe style="border-radius:12px;margin-top:4px;" src="https://open.spotify.com/embed/track/${trackId}" width="100%" height="80" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+      </div>
+    `;
+  }
+
+  chatBox.innerHTML += html;
   chatBox.scrollTop = chatBox.scrollHeight;
 
-  // Re-activate all buttons if backend rendered them
   setTimeout(activateAllBackendButtons, 0);
 }
 
-// This ensures event listeners work for dynamically rendered backend buttons (in case browser disables inline JS)
 function activateAllBackendButtons() {
   const buttons = document.querySelectorAll('button[onclick^="window.handleBotReply"]');
   buttons.forEach(btn => {

@@ -212,6 +212,14 @@ button:hover {
   margin-top: 6px;
 }
 
+.spotify-embed {
+  width: 100%;
+  margin: 0 0 8px 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+
 /* Responsive tweaks */
 @media (max-width: 900px) {
   .main-layout {

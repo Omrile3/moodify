@@ -52,6 +52,31 @@ class CommandInput(BaseModel):
     session_id: str
     command: str
 
+def has_all_preferences(session):
+    # Require all 4: genre, mood, tempo, artist_or_song (or explicit no preference for each)
+    required = ["genre", "mood", "tempo", "artist_or_song"]
+    for key in required:
+        if not (session.get(key) is not None or session.get(f"no_pref_{key}", False)):
+            return False
+    return True
+
+def get_valid_recommendation(session):
+    # Only returns a song if it has a valid spotify link (track_id)
+    attempts = 0
+    max_attempts = 10
+    history_before = set(session.get("history", []))
+    while attempts < max_attempts:
+        song = recommend_engine(session)
+        if not song or song.get('song') == "N/A":
+            return None
+        spotify_url = song.get("spotify_url")
+        if spotify_url and "open.spotify.com/track/" in spotify_url:
+            return song
+        # Skip to next possible song (add to history and try again)
+        session["history"].append((song.get('song'), song.get('artist')))
+        attempts += 1
+    return None
+
 @app.post("/recommend")
 def recommend(preference: PreferenceInput):
     user_message = (
@@ -81,18 +106,12 @@ def recommend(preference: PreferenceInput):
     session = memory.get_session(preference.session_id)
     all_fields = ["genre", "mood", "tempo", "artist_or_song"]
 
-    # Identify which of the three main prefs are done or skipped
-    prefs_or_no = [
-        k for k in ["genre", "mood", "tempo"]
-        if session.get(k) is not None or session.get(f"no_pref_{k}", False)
-    ]
-
-    # If at least three of (genre, mood, tempo) are provided, recommend now!
-    if len(prefs_or_no) >= 3:
-        song = recommend_engine(session)
-        if not song or song.get('song') == "N/A":
+    # Require ALL 4 before recommending
+    if has_all_preferences(session):
+        song = get_valid_recommendation(session)
+        if not song:
             return {
-                "response": "<span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
+                "response": "<span style='color:green'>I couldn’t find a match with a Spotify link. Want to try a different mood, artist, or genre?</span>"
             }
         memory.update_last_song(preference.session_id, song['song'], song['artist'])
         gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
@@ -107,10 +126,10 @@ def recommend(preference: PreferenceInput):
             for k in all_fields:
                 if not fake_session[k]:
                     fake_session[k] = "any"
-            song = recommend_engine(fake_session)
-            if not song or song.get('song') == "N/A":
+            song = get_valid_recommendation(fake_session)
+            if not song:
                 return {
-                    "response": "<span style='color:green'>I couldn’t find a match. Want to try a different mood, artist, or genre?</span>"
+                    "response": "<span style='color:green'>I couldn’t find a match with a Spotify link. Want to try a different mood, artist, or genre?</span>"
                 }
             memory.update_last_song(preference.session_id, song['song'], song['artist'])
             gpt_message = generate_chat_response(song, fake_session, OPENAI_API_KEY)
@@ -152,9 +171,9 @@ def handle_command(command_input: CommandInput):
     # --- 3. Recommend another song if user asks ---
     if any(word in cmd for word in ["another", "again", "next one"]):
         session["history"] = [(session.get("last_song"), session.get("last_artist"))]
-        song = recommend_engine(session)
-        if not song or song.get('song') == "N/A":
-            return {"response": "<span style='color:green'>I couldn’t find another one. Want to change mood, genre, artist, or tempo?</span>"}
+        song = get_valid_recommendation(session)
+        if not song:
+            return {"response": "<span style='color:green'>I couldn’t find another one with a Spotify link. Want to change mood, genre, artist, or tempo?</span>"}
         memory.update_last_song(session_id, song['song'], song['artist'])
         gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
         memory.update_session(session_id, "awaiting_feedback", True)
@@ -169,11 +188,11 @@ def handle_command(command_input: CommandInput):
             if last_song and last_artist:
                 if (last_song, last_artist) not in session["history"]:
                     session["history"].append((last_song, last_artist))
-            song = recommend_engine(session)
-            if not song or song.get('song') == "N/A":
+            song = get_valid_recommendation(session)
+            if not song:
                 memory.update_session(session_id, "awaiting_feedback", False)
                 return {
-                    "response": "<span style='color:green'>I couldn’t find another new song. Want to change mood, genre, artist, or tempo?</span>"
+                    "response": "<span style='color:green'>I couldn’t find another new song with a Spotify link. Want to change mood, genre, artist, or tempo?</span>"
                 }
             memory.update_last_song(session_id, song['song'], song['artist'])
             gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
@@ -195,11 +214,11 @@ def handle_command(command_input: CommandInput):
                 if extracted.get(key):
                     memory.update_session(session_id, key, extracted[key])
             # Now recommend a new song using updated preferences
-            song = recommend_engine(session)
-            if not song or song.get('song') == "N/A":
+            song = get_valid_recommendation(session)
+            if not song:
                 memory.update_session(session_id, "awaiting_feedback", False)
                 return {
-                    "response": "<span style='color:green'>I couldn’t find another new song. Want to change mood, genre, artist, or tempo?</span>"
+                    "response": "<span style='color:green'>I couldn’t find another new song with a Spotify link. Want to change mood, genre, artist, or tempo?</span>"
                 }
             memory.update_last_song(session_id, song['song'], song['artist'])
             gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
