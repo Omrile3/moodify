@@ -320,7 +320,7 @@ def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
         "Your job is to collect music preferences from the user (genre, mood, tempo, artist or song). "
         "For each, you need a value or a clear 'no preference' message from the user - if they have no preference do not update the field. "
         "Do NOT recommend any song until you have ALL FOUR: genre, mood, tempo, artist_or_song (or 'no preference' for each). "
-        "Ask for missing info naturally, never repeat the same question if the user already said 'no preference' for that element. "
+        "Ask for missing info naturally, but ONLY ask about ONE missing element at a time. Never repeat the same question if the user already said 'no preference' or similar for that element. "
         "Once all are provided, you may recommend. After recommendation, always ask for feedback."
         "If the user's message is off-topic or not in English, gently redirect them to music preferences, and ask in English."
     )
@@ -332,7 +332,7 @@ def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
         f"Still missing: {missing}\n"
         f"User said: \"{last_user_message}\"\n\n"
         "Continue the conversation to collect missing information, in a friendly way. "
-        "Only ask about elements that are still missing (not 'no preference'). "
+        "Only ask about ONE element that is still missing (not 'no preference'). "
         "Do not give a recommendation until everything is filled."
     )
 
