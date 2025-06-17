@@ -83,6 +83,13 @@ def user_message_is_no_pref(user_msg):
 
 @app.post("/recommend")
 def recommend(preference: PreferenceInput):
+    session = memory.get_session(preference.session_id)
+    all_fields = ["genre", "mood", "tempo", "artist_or_song"]
+
+    # Figure out which field is missing (ask for only one at a time)
+    missing = [k for k in all_fields if not (session.get(k) is not None or session.get(f"no_pref_{k}", False))]
+    field_being_asked = missing[0] if missing else None
+
     user_message = (
         preference.artist_or_song
         or preference.genre
@@ -90,26 +97,24 @@ def recommend(preference: PreferenceInput):
         or preference.tempo
         or ""
     )
-    session = memory.get_session(preference.session_id)
-
     # Block multiple recommends if waiting for feedback
     if session.get("awaiting_feedback", False):
         return {"response": None}
 
-    # Extract and update preferences from the message
     extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
-    for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        if session.get(key) is None and not session.get(f"no_pref_{key}", False):
-            if extracted.get(key):
-                memory.update_session(preference.session_id, key, extracted[key])
-                memory.update_session(preference.session_id, f"no_pref_{key}", False)
-            elif user_message_is_no_pref(user_message):
-                memory.update_session(preference.session_id, f"no_pref_{key}", True)
+
+    # Only update the field the bot is currently asking for
+    if field_being_asked:
+        val = extracted.get(field_being_asked)
+        if val:
+            memory.update_session(preference.session_id, field_being_asked, val)
+            memory.update_session(preference.session_id, f"no_pref_{field_being_asked}", False)
+        elif user_message_is_no_pref(user_message):
+            memory.update_session(preference.session_id, f"no_pref_{field_being_asked}", True)
 
     session = memory.get_session(preference.session_id)
-    all_fields = ["genre", "mood", "tempo", "artist_or_song"]
 
-    # Only recommend after all are present/skipped (no skipping artist_or_song unless user says so)
+    # Only recommend after all are present/skipped
     if has_all_preferences(session):
         song = get_valid_recommendation(session)
         if not song:
