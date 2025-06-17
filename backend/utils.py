@@ -7,7 +7,7 @@ import base64
 import os
 
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-OPENAI_MODEL = "gpt-4o"  # Or "gpt-4-1106-preview", etc.
+OPENAI_MODEL = "gpt-4o"  
 
 GENRES = {
     "pop", "rock", "classical", "jazz", "metal", "electronic", "hip hop", "rap",
@@ -95,9 +95,11 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
     spotify_url = song_dict.get('spotify_url')
 
     prompt = custom_prompt or f"""
+You are Moodify, a friendly and concise music recommendation assistant.
 The user wants a song that matches these preferences:
 Genre: {genre}, Mood: {mood}, Tempo: {tempo}.
 Recommend only the selected song: "{song}" by {artist} ({song_genre}, {song_tempo} tempo).
+If there is a Spotify link available, include 'Listen on Spotify' as a hyperlink.
 Reply in a warm and friendly tone. Your response must be short and concise — no more than 1.5 sentences.
 Don't suggest alternatives or explain why. Mention only this one song.
 """
@@ -127,7 +129,6 @@ Don't suggest alternatives or explain why. Mention only this one song.
             fallback += f' <a href="{spotify_url}" target="_blank">Listen</a>'
         return fallback
 
-
 def extract_preferences_from_message(message: str, api_key: str) -> dict:
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -155,28 +156,28 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
 
     extracted = {}
     if not any(none_fields.values()):
-        prompt = f"""
-You are an AI that extracts music preferences from user input.
-Respond only in valid JSON with exactly these 4 keys: genre, mood, tempo, artist_or_song.
-If a value is not explicitly or implicitly stated, use null.
+        # --- Patch: More conversational extraction with ChatGPT ---
+        system_prompt = (
+            "You are an AI that extracts ONLY music preferences from user input in English. "
+            "If the message is not in English, reply ONLY with this: '__NOT_ENGLISH__'. "
+            "If the message is not about music, reply ONLY with this: '__NOT_MUSIC__'. "
+            "Otherwise, respond only in valid JSON with exactly these 4 keys: genre, mood, tempo, artist_or_song. "
+            "If a value is not explicitly or implicitly stated, use null. "
+            "Copy genre/mood/tempo words exactly as given, unless the user gives a clear synonym. "
+            "Never interpret unrelated inputs as preferences."
+        )
 
-If the user mentions a mood like "sad", "happy", "calm", or "energetic", copy that word directly as the mood.
-If the user mentions a genre like "indie", "pop", "rock", "jazz", etc., copy that directly as the genre.
-
-Do NOT map or reinterpret "sad" to "calm" or anything else; preserve mood/genre exactly as the user says, unless the user gives a clear synonym ("melancholy" → "sad" is OK).
-
-Examples:
-- "I'm feeling sad" → mood: "sad"
-- "I like indie music" → genre: "indie"
-- "I'm happy and want upbeat pop" → mood: "happy", genre: "pop", tempo: "fast" or "upbeat"
-
-Input: "{message}"
+        user_prompt = f"""Extract the user's music preferences from the following message. 
+If genre, mood, tempo, or artist/song is not mentioned or not clear, set to null. 
+Reply only with the JSON object, nothing else.
+Input: "{message}".
 """
+
         body = {
             "model": OPENAI_MODEL,
             "messages": [
-                {"role": "system", "content": "You extract music preferences from user messages in JSON, copying mood and genre words exactly unless a clear synonym is used. Do NOT reinterpret 'sad' or 'indie'."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ],
             "temperature": 0.2,
             "max_tokens": 250
@@ -188,6 +189,13 @@ Input: "{message}"
             text = response.json()["choices"][0]["message"]["content"]
 
             text = text.strip()
+            if text == "__NOT_ENGLISH__":
+                extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None, "_not_english": True}
+                return extracted
+            elif text == "__NOT_MUSIC__":
+                extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None, "_not_music": True}
+                return extracted
+
             if text.startswith("```"):
                 text = text.lstrip("`")
                 text = text[text.find("{"):]
@@ -226,7 +234,7 @@ Input: "{message}"
                 if corrected:
                     extracted[key] = corrected
 
-    return {k: extracted.get(k, None) for k in ["genre", "mood", "tempo", "artist_or_song"]}
+    return {k: extracted.get(k, None) for k in ["genre", "mood", "tempo", "artist_or_song"]} | {k: v for k, v in extracted.items() if k.startswith("_")}
 
 def map_free_text_to_mood(text: str) -> str:
     text = text.lower()
@@ -269,6 +277,7 @@ def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
+    conversation = session.get("conversation", [])
     known_prefs = []
     for k in ["genre", "mood", "tempo", "artist_or_song"]:
         v = session.get(k)
@@ -283,34 +292,24 @@ def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
     no_pref_str = ", ".join(no_prefs) if no_prefs else "none"
 
     prompt = f"""
-You are Moodify, a helpful, friendly music AI. You are helping a user choose a song.
-Here is what you know about the user's preferences so far: {prefs_str}.
-User has said they have no preference for: {no_pref_str}.
+You are Moodify, a conversational AI music assistant.
+- You ONLY help users with music recommendations and song suggestions.
+- If the user's message is off-topic (not related to music, moods, genres, artists, songs, etc), kindly redirect them back to music.
+- If the user types in a language other than English, politely tell them you can only respond to requests in English and ask them to rephrase in English.
+- Never answer questions about anything except music preferences or recommendations.
+Be conversational and concise. If you need more info, ask short follow-up questions about genre, mood, tempo, or artist. Do not repeat questions for things the user has already said "no preference" to. After a recommendation, ask if they like it.
+Known preferences so far: {prefs_str}.
+No preference for: {no_pref_str}.
+User said: "{last_user_message}"
 
-Recent user message: "{last_user_message}"
-
-If you are still missing genre, mood, tempo, or artist, ask a short (1 line), friendly follow-up question about the next missing thing, unless user said they have no preference for that (don't ask again if so).
-When you have enough info, say your recommended song in one concise (one line), enthusiastic sentence, then ask the user if they like it.
-genre can be any of: {', '.join(GENRES)}.
-mood can be: sad, energetic, calm, happy.
-tempo can be: slow, medium, fast.
-artist_or_song can be any artist or song name.
-
-- NEVER ask the user the same thing twice or to confirm the same preference repeatedly.
-- If you already know at least two out of genre, mood, and tempo, STOP asking clarifying questions and RECOMMEND a song.
-- If the user says "yes", "no", or repeats their preference, just move forward or adjust accordingly.
-- After 3 clarifying messages, you must always recommend a song, even if something is missing.
-
-if the user input is something weird or mismatching the context, try more leading question to see if they are sad, energetic, calm, happy. same with tempo and genre (e.g .).
-if the user input is incorrect used fuzzy matching to find the closest match.
-if the user input is not in english, tell the user you can only understand english and ask them to rephrase in english!.
-if the user input is not music related, tell them you can only help with music recommendations and ask them to rephrase their request.
-
-if the user input is confusing like I feel "happy but sad", ask them to clarify their mood.
-if the user input to any question is something alongside "no", "none", "not really", "doesn't matter", "i don't care", "i don't mind", "no preference", or similar, treat it as no preference for that category and do not update the field and do not ask them about it again.
-Be as conversational as possible, do not use a fixed script. Reply with only your message, do not restate the session data.
-Ask a maximum of 4 questions before recommending a song.
+Continue the chat as a friendly, concise music assistant. 
+Be conversational and free-flowing; do not use a fixed script or ask the same question more than once.
+If you're missing genre, mood, tempo, or artist, ask about the next one, but never repeat a question if the user already said they have no preference.
+When you have enough preferences, confidently recommend a song. 
+After a recommendation, always ask the user if they like it and offer to try again or change preferences if not.
+If the user input is not in English or is irrelevant to music, explain that you only provide music recommendations in English.
 """
+
     body = {
         "model": OPENAI_MODEL,
         "messages": [
