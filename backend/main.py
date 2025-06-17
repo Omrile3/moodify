@@ -82,6 +82,16 @@ def get_valid_recommendation(session):
         attempts += 1
     return None
 
+# --- NO PREFERENCE LOGIC PATCH ---
+NO_PREF_WORDS = {
+    "no", "none", "no preference", "nothing", "any", "whatever", "anything",
+    "doesn't matter", "no specific preference", "all good", "whatever works", "up to you"
+}
+
+def user_message_is_no_pref(user_msg):
+    user_msg_lower = user_msg.strip().lower()
+    return any(word in user_msg_lower for word in NO_PREF_WORDS)
+
 @app.post("/recommend")
 def recommend(preference: PreferenceInput):
     user_message = (
@@ -97,16 +107,18 @@ def recommend(preference: PreferenceInput):
     if session.get("awaiting_feedback", False):
         return {"response": None}
 
-    # Always extract new info
+    # Extract preferences (from NLP) and handle "no preference" intent
     extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
+    user_msg_lower = user_message.strip().lower()
+
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        if extracted.get(key) is None and user_message.strip().lower() in [
-            "no", "none", "no preference", "nothing", "any", "whatever", "anything", "doesn't matter", "no specific preference"
-        ]:
-            memory.update_session(preference.session_id, f"no_pref_{key}", True)
-        elif extracted.get(key):
-            memory.update_session(preference.session_id, key, extracted[key])
-            memory.update_session(preference.session_id, f"no_pref_{key}", False)
+        # Only update if not already set or marked as no_pref
+        if session.get(key) is None and not session.get(f"no_pref_{key}", False):
+            if extracted.get(key):
+                memory.update_session(preference.session_id, key, extracted[key])
+                memory.update_session(preference.session_id, f"no_pref_{key}", False)
+            elif user_message_is_no_pref(user_message):
+                memory.update_session(preference.session_id, f"no_pref_{key}", True)
 
     session = memory.get_session(preference.session_id)
     all_fields = ["genre", "mood", "tempo", "artist_or_song"]
