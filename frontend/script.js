@@ -110,12 +110,13 @@ function appendUserMessage(msg, isButton) {
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
+// PATCH: Spotify strip works for any Spotify link in bot message (HTML, text, or both)
 function appendBotMessage(msgOrObj) {
   const chatBox = document.getElementById("chat-box");
   let msg = msgOrObj;
   let spotifyUrl = null;
 
-  // If backend someday sends an object instead of string:
+  // If backend sends an object instead of string (future-proof):
   if (typeof msgOrObj === "object" && msgOrObj !== null) {
     msg = msgOrObj.response || msgOrObj.text || "";
     if (msgOrObj.spotify_url) spotifyUrl = msgOrObj.spotify_url;
@@ -123,7 +124,7 @@ function appendBotMessage(msgOrObj) {
     // Try to extract spotify_url from HTML in message
     const spotifyMatch = msg && msg.match(/https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
     if (spotifyMatch) {
-      spotifyUrl = `https://open.spotify.com/track/${spotifyMatch[1]}`;
+      spotifyUrl = `https://open.spotify.com/track/${spotifyMatch[0].split("/").pop()}`;
     }
   }
 
@@ -140,6 +141,10 @@ function appendBotMessage(msgOrObj) {
         </div>
       `;
     }
+    // Remove redundant Listen on Spotify plain links from message text
+    html = html.replace(/<a [^>]+>(Listen on Spotify)?<\/a>/ig, '').replace(/https:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+/g, '');
+    // Re-append bot name and message without redundant link
+    html = `<p class="green-response"><strong>Moodify:</strong> ${msg.replace(/<a [^>]+>(Listen on Spotify)?<\/a>/ig, '').replace(/https:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+/g, '')}</p>` + html.split('</p>')[1];
   }
 
   chatBox.innerHTML += html;

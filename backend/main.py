@@ -92,11 +92,11 @@ def recommend(preference: PreferenceInput):
     )
     session = memory.get_session(preference.session_id)
 
-    # Don't recommend again if waiting for feedback
+    # Block multiple recommends if waiting for feedback
     if session.get("awaiting_feedback", False):
         return {"response": None}
 
-    # Extract preferences (from NLP) and handle "no preference" intent
+    # Extract and update preferences from the message
     extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if session.get(key) is None and not session.get(f"no_pref_{key}", False):
@@ -109,7 +109,7 @@ def recommend(preference: PreferenceInput):
     session = memory.get_session(preference.session_id)
     all_fields = ["genre", "mood", "tempo", "artist_or_song"]
 
-    # --- PATCH: Only recommend after all four are present/skipped! ---
+    # Only recommend after all are present/skipped (no skipping artist_or_song unless user says so)
     if has_all_preferences(session):
         song = get_valid_recommendation(session)
         if not song:
@@ -122,10 +122,11 @@ def recommend(preference: PreferenceInput):
         memory.update_session(preference.session_id, "followup_count", 0)
         return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
 
-    # --- Let GPT-4o steer: ask only for missing preferences, never recommend early ---
+    # Otherwise, let GPT steer, always ask for just one missing preference at a time
     known_prefs = {k: session.get(k) for k in all_fields}
     missing = [k for k in all_fields if not (session.get(k) is not None or session.get(f"no_pref_{k}", False))]
     no_prefs = [k for k in all_fields if session.get(f"no_pref_{k}", False)]
+
     context = (
         f"Known preferences: {known_prefs}. "
         f"Still missing: {missing}. "
