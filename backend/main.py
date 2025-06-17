@@ -71,7 +71,8 @@ def get_valid_recommendation(session):
     attempts = 0
     max_attempts = 10
     while attempts < max_attempts:
-        song = recommend_engine(session)
+        # Pass API key here!
+        song = recommend_engine(session, api_key=OPENAI_API_KEY)
         if not song or song.get('song') == "N/A":
             return None
         spotify_url = song.get("spotify_url")
