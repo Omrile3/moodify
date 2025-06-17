@@ -53,18 +53,23 @@ class CommandInput(BaseModel):
     command: str
 
 def has_all_preferences(session):
-    # Require all 4: genre, mood, tempo, artist_or_song (or explicit no preference for each)
     required = ["genre", "mood", "tempo", "artist_or_song"]
     for key in required:
         if not (session.get(key) is not None or session.get(f"no_pref_{key}", False)):
             return False
     return True
 
+def next_missing_preference(session):
+    """Return the next preference the user hasn't provided or skipped, in order."""
+    order = ["genre", "mood", "tempo", "artist_or_song"]
+    for key in order:
+        if not (session.get(key) is not None or session.get(f"no_pref_{key}", False)):
+            return key
+    return None
+
 def get_valid_recommendation(session):
-    # Only returns a song if it has a valid spotify link (track_id)
     attempts = 0
     max_attempts = 10
-    history_before = set(session.get("history", []))
     while attempts < max_attempts:
         song = recommend_engine(session)
         if not song or song.get('song') == "N/A":
@@ -73,7 +78,7 @@ def get_valid_recommendation(session):
         if spotify_url and "open.spotify.com/track/" in spotify_url:
             return song
         # Skip to next possible song (add to history and try again)
-        session["history"].append((song.get('song'), song.get('artist')))
+        session.setdefault("history", []).append((song.get('song'), song.get('artist')))
         attempts += 1
     return None
 
@@ -106,7 +111,7 @@ def recommend(preference: PreferenceInput):
     session = memory.get_session(preference.session_id)
     all_fields = ["genre", "mood", "tempo", "artist_or_song"]
 
-    # Require ALL 4 before recommending
+    # --- Only recommend after ALL 4 are present/skipped ---
     if has_all_preferences(session):
         song = get_valid_recommendation(session)
         if not song:
@@ -119,6 +124,8 @@ def recommend(preference: PreferenceInput):
         memory.update_session(preference.session_id, "followup_count", 0)
         return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
     else:
+        # Ask for the next missing preference
+        next_pref = next_missing_preference(session)
         followup_count = session.get("followup_count", 0)
         if followup_count >= 4:
             # Recommend with whatever info is present, fallback logic
@@ -136,7 +143,14 @@ def recommend(preference: PreferenceInput):
             memory.update_session(preference.session_id, "followup_count", 0)
             memory.update_session(preference.session_id, "awaiting_feedback", True)
             return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
-        ai_message = next_ai_message(session, user_message, OPENAI_API_KEY)
+        # Prompt for next missing preference, conversationally
+        prompt_map = {
+            "genre": "What genre of music are you in the mood for?",
+            "mood": "What mood are you in today?",
+            "tempo": "Do you prefer your music fast, medium, or slow?",
+            "artist_or_song": "Is there a favorite artist or song you'd like to hear, or no preference?"
+        }
+        ai_message = prompt_map.get(next_pref) or next_ai_message(session, user_message, OPENAI_API_KEY)
         memory.update_session(preference.session_id, "followup_count", followup_count + 1)
         return {"response": f"<span style='color:green'>{ai_message}</span>"}
 

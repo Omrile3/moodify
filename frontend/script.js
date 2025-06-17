@@ -110,20 +110,36 @@ function appendUserMessage(msg, isButton) {
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-function appendBotMessage(msg) {
+function appendBotMessage(msgOrObj) {
   const chatBox = document.getElementById("chat-box");
+  let msg = msgOrObj;
+  let spotifyUrl = null;
+
+  // If backend someday sends an object instead of string:
+  if (typeof msgOrObj === "object" && msgOrObj !== null) {
+    msg = msgOrObj.response || msgOrObj.text || "";
+    if (msgOrObj.spotify_url) spotifyUrl = msgOrObj.spotify_url;
+  } else {
+    // Try to extract spotify_url from HTML in message
+    const spotifyMatch = msg && msg.match(/https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
+    if (spotifyMatch) {
+      spotifyUrl = `https://open.spotify.com/track/${spotifyMatch[1]}`;
+    }
+  }
+
   let html = `<p class="green-response"><strong>Moodify:</strong> ${msg}</p>`;
 
-  // --- Spotify Embed Patch ---
-  // Try to find a Spotify track URL in the message
-  const spotifyMatch = msg && msg.match(/https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
-  if (spotifyMatch) {
-    const trackId = spotifyMatch[1];
-    html += `
-      <div class="spotify-embed">
-        <iframe style="border-radius:12px;margin-top:4px;" src="https://open.spotify.com/embed/track/${trackId}" width="100%" height="80" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
-      </div>
-    `;
+  // --- Always embed if we have a valid spotifyUrl ---
+  if (spotifyUrl) {
+    // Only take the track ID if present
+    const idMatch = spotifyUrl.match(/track\/([a-zA-Z0-9]+)/);
+    if (idMatch) {
+      html += `
+        <div class="spotify-embed">
+          <iframe style="border-radius:12px;margin-top:4px;" src="https://open.spotify.com/embed/track/${idMatch[1]}" width="100%" height="80" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+        </div>
+      `;
+    }
   }
 
   chatBox.innerHTML += html;
