@@ -13,17 +13,14 @@ from utils import (
     split_mode_category,
     build_recommendation_key,
     precompute_recommendation_map,
-    get_mood_vector,
+    get_mood_vector,  # Hybrid mood vector logic
 )
 
-# Load and prepare dataset
 DATA_PATH = "data/songs.csv"
 df = pd.read_csv(DATA_PATH)
 
-# Save original tempo for reference
 df["tempo_raw"] = pd.to_numeric(df["tempo"], errors="coerce")
 
-# Normalize feature columns
 features = ['valence', 'energy', 'danceability', 'acousticness', 'tempo']
 df = df.dropna(subset=features)
 df[features] = df[features].apply(pd.to_numeric, errors='coerce')
@@ -95,16 +92,13 @@ def weighted_score(row, prefs):
             score -= 3
     return score
 
-def recommend_engine(preferences: dict):
-    from utils import OPENAI_API_KEY  # For GPT-4o API key
-
+def recommend_engine(preferences: dict, api_key: str):
     def apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=None):
         local_df = df.copy()
         mood_str = preferences.get("mood")
         mood_vec = None
-        # Hybrid mood vector: get vector (GPT or fallback)
         if mood_str:
-            mood_vec = get_mood_vector(mood_str, OPENAI_API_KEY)
+            mood_vec = get_mood_vector(mood_str, api_key)
         if preferences.get("artist_or_song"):
             local_df = fuzzy_match_artist_song(local_df, preferences["artist_or_song"])
         if filter_genre and preferences.get("genre"):
@@ -112,7 +106,6 @@ def recommend_engine(preferences: dict):
         if filter_tempo and preferences.get("tempo"):
             bpm_range = convert_tempo_to_bpm(preferences["tempo"])
             local_df = local_df[(local_df['tempo_raw'] >= bpm_range[0]) & (local_df['tempo_raw'] <= bpm_range[1])]
-        # Mood similarity (GPT-4o or fallback vector)
         if mood_vec is not None and not local_df.empty:
             similarities = cosine_similarity(np.array(mood_vec).reshape(1, -1), local_df[features].values).flatten()
             local_df["similarity"] = similarities
