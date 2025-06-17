@@ -122,9 +122,9 @@ function appendBotMessage(msgOrObj) {
     if (msgOrObj.spotify_url) spotifyUrl = msgOrObj.spotify_url;
   } else {
     // Try to extract spotify_url from HTML in message
-    const spotifyMatch = msg && msg.match(/https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
+    const spotifyMatch = msg && msg.match(/https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]{22})/);
     if (spotifyMatch) {
-      spotifyUrl = `https://open.spotify.com/track/${spotifyMatch[0].split("/").pop()}`;
+      spotifyUrl = `https://open.spotify.com/track/${spotifyMatch[1]}`;
     }
   }
 
@@ -132,9 +132,9 @@ function appendBotMessage(msgOrObj) {
 
   // --- Always embed if we have a valid spotifyUrl ---
   if (spotifyUrl) {
-    // Only take the track ID if present
-    const idMatch = spotifyUrl.match(/track\/([a-zA-Z0-9]+)/);
-    if (idMatch) {
+    // Only take the track ID if present, and it's valid (22-char alphanum, not "None")
+    const idMatch = spotifyUrl.match(/track\/([a-zA-Z0-9]{22})/);
+    if (idMatch && idMatch[1] && idMatch[1].toLowerCase() !== "none") {
       html += `
         <div class="spotify-embed">
           <iframe style="border-radius:12px;margin-top:4px;" src="https://open.spotify.com/embed/track/${idMatch[1]}" width="100%" height="80" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
@@ -143,7 +143,6 @@ function appendBotMessage(msgOrObj) {
     }
     // Remove redundant Listen on Spotify plain links from message text
     html = html.replace(/<a [^>]+>(Listen on Spotify)?<\/a>/ig, '').replace(/https:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+/g, '');
-    // Re-append bot name and message without redundant link
     html = `<p class="green-response"><strong>Moodify:</strong> ${msg.replace(/<a [^>]+>(Listen on Spotify)?<\/a>/ig, '').replace(/https:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+/g, '')}</p>` + html.split('</p>')[1];
   }
 

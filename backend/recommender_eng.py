@@ -179,13 +179,26 @@ def recommend_engine(preferences: dict, api_key: str):
     preferences["history"] = history
 
     tempo_category = bpm_to_tempo_category(top.get("tempo_raw", 100))
+    track_id = top.get("track_id")
+    spotify_url = None
+    if (
+        track_id 
+        and isinstance(track_id, str)
+        and track_id.lower() != "none"
+        and track_id.strip() != ""
+        and len(track_id.strip()) == 22
+        and track_id.strip().isalnum()
+    ):
+        spotify_url = f"https://open.spotify.com/track/{track_id.strip()}"
+
+
     response = {
         "song": top.get("track_name", "Unknown"),
         "artist": top.get("track_artist", "Unknown"),
         "genre": top.get("playlist_genre", "Unknown"),
         "mood": preferences.get("mood", "Unknown"),
         "tempo": tempo_category,
-        "spotify_url": f"https://open.spotify.com/track/{top.get('track_id')}" if top.get("track_id") else None
+        "spotify_url": spotify_url
     }
 
     if preferences.get("artist_or_song"):
