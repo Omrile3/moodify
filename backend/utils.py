@@ -42,7 +42,6 @@ VAGUE_TO_MOOD = {
     "chill": "calm",
 }
 
-# --- Hybrid mood vector system by spotify ---
 HARDCODED_MOOD_VECTORS = {
     "happy":        [0.9, 0.8, 0.7, 0.2, 0.6],
     "sad":          [0.2, 0.3, 0.2, 0.6, 0.4],
@@ -88,12 +87,10 @@ _MOOD_VECTOR_CACHE = {}
 
 def get_mood_vector(mood, api_key, fallback=HARDCODED_MOOD_VECTORS):
     mood = mood.lower().strip()
-    # Use cache or fallback if possible
     if mood in _MOOD_VECTOR_CACHE:
         return _MOOD_VECTOR_CACHE[mood]
     if mood in fallback:
         return fallback[mood]
-    # Ask GPT-4o for a mood vector
     prompt = (
         f"The mood '{mood}' needs to be mapped to a 5-dimensional music feature vector: "
         "valence (happiness), energy, danceability, acousticness, and tempo, each as a number between 0 and 1. "
@@ -116,7 +113,6 @@ def get_mood_vector(mood, api_key, fallback=HARDCODED_MOOD_VECTORS):
         response = requests.post(OPENAI_API_URL, headers=headers, json=body, timeout=10)
         response.raise_for_status()
         text = response.json()["choices"][0]["message"]["content"].strip()
-        # Parse response as Python list
         arr = None
         match = re.search(r"\[([^\[\]]+)\]", text)
         if match:
@@ -127,7 +123,6 @@ def get_mood_vector(mood, api_key, fallback=HARDCODED_MOOD_VECTORS):
             return arr
     except Exception as e:
         print("GPT mood vector fetch failed, fallback to hardcoded:", e)
-    # Fallback
     return fallback.get(mood, fallback["calm"])
 
 def convert_tempo_to_bpm(tempo_category: str) -> tuple:
@@ -205,7 +200,6 @@ Don't suggest alternatives or explain why. Mention only this one song.
         response = requests.post(OPENAI_API_URL, headers=headers, json=body)
         response.raise_for_status()
         message = response.json()["choices"][0]["message"]["content"].strip()
-        # Only add Spotify link if it looks valid
         if spotify_url and isinstance(spotify_url, str) and "open.spotify.com/track/" in spotify_url and len(spotify_url) > 35:
             message += f' 🎵 <a href="{spotify_url}" target="_blank">Listen on Spotify</a>'
         return message
@@ -222,33 +216,40 @@ def extract_preferences_from_message(message: str, api_key: str) -> dict:
         "Content-Type": "application/json"
     }
     msg = message.strip().lower()
+
+    # --- Step 1: Detect "no preference" for each field separately ---
     def contains_none_like(val):
         for none_str in NONE_LIKE:
             if f" {none_str} " in f" {val} ":
                 return True
         return False
     none_fields = {field: contains_none_like(msg) for field in ["genre", "mood", "tempo", "artist_or_song"]}
+
+    # --- Step 2: Quick mapping for vague phrases ---
     mapped = {}
     for phrase, mapped_val in VAGUE_TO_MOOD.items():
         if phrase in msg:
-            if mapped_val in {"happy", "sad", "calm", "energetic"}:
+            if mapped_val in MOODS:
                 mapped["mood"] = mapped_val
             if mapped_val == "energetic":
                 mapped["tempo"] = "fast"
             break
+
+    # --- Step 3: Call GPT-4o for extraction ---
     extracted = {}
     if not any(none_fields.values()):
+        mood_list_str = ", ".join(f'"{m}"' for m in sorted(MOODS))
         system_prompt = (
-            "You are an AI that extracts ONLY music preferences from user input in English. "
-            "If the message is not in English, reply ONLY with this: '__NOT_ENGLISH__'. "
-            "If the message is not about music, reply ONLY with this: '__NOT_MUSIC__'. "
-            "Otherwise, respond only in valid JSON with exactly these 4 keys: genre, mood, tempo, artist_or_song. "
-            "If a value is not explicitly or implicitly stated, use null. "
-            "Copy genre/mood/tempo words exactly as given, unless the user gives a clear synonym. "
-            "Never interpret unrelated inputs as preferences."
+            f"You are an AI that extracts ONLY music preferences from user input in English.\n"
+            f"For the 'mood' field, only use one of these values (case-insensitive, single word): [{mood_list_str}].\n"
+            "If the user's input doesn't clearly match a mood in the list, set 'mood' to null.\n"
+            "If the message is not in English, reply ONLY with this: '__NOT_ENGLISH__'.\n"
+            "If the message is not about music, reply ONLY with this: '__NOT_MUSIC__'.\n"
+            "Respond only in valid JSON with exactly these 4 keys: genre, mood, tempo, artist_or_song. If a value is not clear, set to null.\n"
+            "Never infer or guess outside this set for moods."
         )
-        user_prompt = f"""Extract the user's music preferences from the following message. 
-If genre, mood, tempo, or artist/song is not mentioned or not clear, set to null. 
+        user_prompt = f"""Extract the user's music preferences from the following message.
+If genre, mood, tempo, or artist/song is not mentioned or not clear, set to null.
 Reply only with the JSON object, nothing else.
 Input: "{message}".
 """
@@ -264,8 +265,7 @@ Input: "{message}".
         try:
             response = requests.post(OPENAI_API_URL, headers=headers, json=body)
             response.raise_for_status()
-            text = response.json()["choices"][0]["message"]["content"]
-            text = text.strip()
+            text = response.json()["choices"][0]["message"]["content"].strip()
             if text == "__NOT_ENGLISH__":
                 extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None, "_not_english": True}
                 return extracted
@@ -291,6 +291,8 @@ Input: "{message}".
             extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
     else:
         extracted = {"genre": None, "mood": None, "tempo": None, "artist_or_song": None}
+
+    # --- Step 4: Post-processing: enforce allowed moods/genres ---
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
         if none_fields.get(key):
             extracted[key] = None
@@ -302,28 +304,12 @@ Input: "{message}".
                 extracted[key] = None
             if key == "mood":
                 corrected = fuzzy_match_word(val, MOODS)
-                if corrected:
-                    extracted[key] = corrected
+                extracted[key] = corrected if corrected in MOODS else None
             if key == "genre":
                 corrected = fuzzy_match_word(val, GENRES)
-                if corrected:
-                    extracted[key] = corrected
+                extracted[key] = corrected if corrected in GENRES else None
     return {k: extracted.get(k, None) for k in ["genre", "mood", "tempo", "artist_or_song"]} | {k: v for k, v in extracted.items() if k.startswith("_")}
 
-def map_free_text_to_mood(text: str) -> str:
-    text = text.lower()
-    if any(word in text for word in ["cry", "sad", "lonely", "depressed", "rainy", "tears", "tired", "exhausted"]):
-        return "sad"
-    elif any(word in text for word in ["party", "hyped", "dance", "workout", "pump", "intense", "energetic", "upbeat"]):
-        return "energetic"
-    elif any(word in text for word in ["chill", "calm", "relax", "study", "lofi", "smooth"]):
-        return "calm"
-    elif any(word in text for word in ["happy", "joy", "sunny", "fun", "good mood"]):
-        return "happy"
-    elif any(word in text for word in ["angry", "mad", "rage", "furious", "pissed"]):
-        return "energetic"
-    else:
-        return "calm"
 
 def split_mode_category(mode_category: str) -> tuple:
     if isinstance(mode_category, str):
@@ -393,4 +379,3 @@ def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
     except Exception as e:
         print("OpenAI next_ai_message error:", e)
         return "What kind of music do you feel like today?"
-

@@ -9,7 +9,6 @@ from utils import (
     fuzzy_match_artist_song,
     generate_chat_response,
     extract_preferences_from_message,
-    map_free_text_to_mood,
     split_mode_category,
     build_recommendation_key,
     precompute_recommendation_map,
@@ -93,6 +92,14 @@ def weighted_score(row, prefs):
     return score
 
 def recommend_engine(preferences: dict, api_key: str):
+    # Defensive: Only recommend if all four keys present (filled or None/"no preference")
+    must_have = ["genre", "mood", "tempo", "artist_or_song"]
+    # Only proceed if all fields are filled (string) or explicitly None (no preference)
+    for k in must_have:
+        # If the session logic is correct, each should exist (even as None)
+        if k not in preferences or (preferences[k] is None and not preferences.get(f"no_pref_{k}", False)):
+            return None
+
     def apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=None):
         local_df = df.copy()
         mood_str = preferences.get("mood")
@@ -190,7 +197,6 @@ def recommend_engine(preferences: dict, api_key: str):
         and track_id.strip().isalnum()
     ):
         spotify_url = f"https://open.spotify.com/track/{track_id.strip()}"
-
 
     response = {
         "song": top.get("track_name", "Unknown"),
