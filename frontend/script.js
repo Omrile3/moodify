@@ -1,8 +1,6 @@
-const backendUrl = "https://moodify-backend-uj8d.onrender.com"; // Update if testing locally/different deployment
-
+const backendUrl = "https://moodify-backend-uj8d.onrender.com";
 const sessionId = generateSessionId();
 
-// Monkey-patch window.handleBotReply so backend HTML buttons always work!
 window.handleBotReply = function (msg) {
   appendUserMessage(msg, true);
   showTypingIndicator();
@@ -28,8 +26,6 @@ window.handleBotReply = function (msg) {
       updatePreferencesPanel();
     });
 };
-
-// --- Existing code ---
 
 window.sendMessage = function () {
   const inputField = document.getElementById("user-input");
@@ -57,7 +53,7 @@ window.sendMessage = function () {
       setTimeout(() => {
         hideTypingIndicator();
         appendBotMessage(data.response || "Something went wrong.");
-        updatePreferencesPanel(); // Always fetch sidebar from backend after bot response
+        updatePreferencesPanel();
       }, delay);
     })
     .catch(error => {
@@ -68,9 +64,8 @@ window.sendMessage = function () {
     });
 };
 
-// Initial greeting on page load
 window.onload = () => {
-  document.getElementById("chat-box").innerHTML = ""; // Ensure chat is empty
+  document.getElementById("chat-box").innerHTML = "";
   fetch(`${backendUrl}/recommend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -101,7 +96,6 @@ document.getElementById("user-input").addEventListener("keypress", function (eve
 
 function appendUserMessage(msg, isButton) {
   const chatBox = document.getElementById("chat-box");
-  // If message is from a button, don't prepend "You:"
   if (isButton) {
     chatBox.innerHTML += `<p><strong>You:</strong> <span class="user-btn-msg">${msg}</span></p>`;
   } else {
@@ -110,18 +104,15 @@ function appendUserMessage(msg, isButton) {
   chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-// PATCH: Spotify strip works for any Spotify link in bot message (HTML, text, or both)
 function appendBotMessage(msgOrObj) {
   const chatBox = document.getElementById("chat-box");
   let msg = msgOrObj;
   let spotifyUrl = null;
 
-  // If backend sends an object instead of string (future-proof):
   if (typeof msgOrObj === "object" && msgOrObj !== null) {
     msg = msgOrObj.response || msgOrObj.text || "";
     if (msgOrObj.spotify_url) spotifyUrl = msgOrObj.spotify_url;
   } else {
-    // Try to extract spotify_url from HTML in message
     const spotifyMatch = msg && msg.match(/https:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]{22})/);
     if (spotifyMatch) {
       spotifyUrl = `https://open.spotify.com/track/${spotifyMatch[1]}`;
@@ -130,9 +121,7 @@ function appendBotMessage(msgOrObj) {
 
   let html = `<p class="green-response"><strong>Moodify:</strong> ${msg}</p>`;
 
-  // --- Always embed if we have a valid spotifyUrl ---
   if (spotifyUrl) {
-    // Only take the track ID if present, and it's valid (22-char alphanum, not "None")
     const idMatch = spotifyUrl.match(/track\/([a-zA-Z0-9]{22})/);
     if (idMatch && idMatch[1] && idMatch[1].toLowerCase() !== "none") {
       html += `
@@ -141,7 +130,6 @@ function appendBotMessage(msgOrObj) {
         </div>
       `;
     }
-    // Remove redundant Listen on Spotify plain links from message text
     html = html.replace(/<a [^>]+>(Listen on Spotify)?<\/a>/ig, '').replace(/https:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+/g, '');
     html = `<p class="green-response"><strong>Moodify:</strong> ${msg.replace(/<a [^>]+>(Listen on Spotify)?<\/a>/ig, '').replace(/https:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+/g, '')}</p>` + html.split('</p>')[1];
   }
@@ -155,7 +143,6 @@ function appendBotMessage(msgOrObj) {
 function activateAllBackendButtons() {
   const buttons = document.querySelectorAll('button[onclick^="window.handleBotReply"]');
   buttons.forEach(btn => {
-    // Only patch if not already patched (avoid multiple listeners)
     if (!btn.dataset.patched) {
       const cmdMatch = btn.getAttribute('onclick').match(/window\.handleBotReply\(['"](.+?)['"]\)/);
       if (cmdMatch) {
@@ -183,11 +170,10 @@ function hideTypingIndicator() {
 function calculateTypingDelay(text) {
   if (!text) return 500;
   const wordCount = text.split(" ").length;
-  const delayPerWord = 120; // ms
+  const delayPerWord = 120;
   return Math.min(3000, wordCount * delayPerWord);
 }
 
-// --- PATCHED RESET: reload page after backend reset ---
 window.resetSession = function () {
   showTypingIndicator();
   fetch(`${backendUrl}/reset`, {
@@ -197,46 +183,60 @@ window.resetSession = function () {
   })
     .then(res => res.json())
     .then(data => {
-      // After backend confirms, reload the page for a full fresh state
       window.location.reload();
     })
     .catch(error => {
       hideTypingIndicator();
       appendBotMessage("⚠️ Sorry, something went wrong while resetting your session.");
       console.error("Reset error:", error);
-
-      // Also reset panel in case backend fails
       document.getElementById("pref-genre").innerText = '—';
       document.getElementById("pref-mood").innerText = '—';
       document.getElementById("pref-tempo").innerText = '—';
       document.getElementById("pref-artist").innerText = '—';
       document.getElementById("user-input").value = "";
+      updateProgressBar(0);
     });
 };
 
-// --- Preferences Panel Logic ---
 function updatePreferencesPanel() {
   fetch(`${backendUrl}/session/${sessionId}`)
     .then(res => res.json())
     .then(data => {
       // Defensive defaults
-      const genre = data.genre ? capitalize(data.genre) : '—';
-      const mood = data.mood ? capitalize(data.mood) : '—';
-      const tempo = data.tempo ? capitalize(data.tempo) : '—';
-      const artist = data.artist_or_song ? capitalize(data.artist_or_song) : '—';
+      const genre = data.genre ? capitalize(data.genre) : (data.no_pref_genre ? '—' : '—');
+      const mood = data.mood ? capitalize(data.mood) : (data.no_pref_mood ? '—' : '—');
+      const tempo = data.tempo ? capitalize(data.tempo) : (data.no_pref_tempo ? '—' : '—');
+      const artist = data.artist_or_song ? capitalize(data.artist_or_song) : (data.no_pref_artist_or_song ? '—' : '—');
 
       document.getElementById("pref-genre").innerText = genre;
       document.getElementById("pref-mood").innerText = mood;
       document.getElementById("pref-tempo").innerText = tempo;
       document.getElementById("pref-artist").innerText = artist;
+
+      // Progress bar logic
+      let filled = 0;
+      if (data.genre || data.no_pref_genre) filled += 1;
+      if (data.mood || data.no_pref_mood) filled += 1;
+      if (data.tempo || data.no_pref_tempo) filled += 1;
+      if (data.artist_or_song || data.no_pref_artist_or_song) filled += 1;
+
+      updateProgressBar(filled);
     })
     .catch(() => {
-      // In case backend fails, clear to dashes
       document.getElementById("pref-genre").innerText = '—';
       document.getElementById("pref-mood").innerText = '—';
       document.getElementById("pref-tempo").innerText = '—';
       document.getElementById("pref-artist").innerText = '—';
+      updateProgressBar(0);
     });
+}
+
+function updateProgressBar(filled) {
+  const percent = (filled / 4) * 100;
+  const fillEl = document.getElementById("progress-bar-fill");
+  const labelEl = document.getElementById("progress-label");
+  fillEl.style.width = percent + "%";
+  labelEl.textContent = `Preferences: ${filled}/4 filled`;
 }
 
 function capitalize(s) {
