@@ -310,41 +310,37 @@ def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    conversation = session.get("conversation", [])
-    known_prefs = []
-    for k in ["genre", "mood", "tempo", "artist_or_song"]:
-        v = session.get(k)
-        if v:
-            known_prefs.append(f"{k}: {v}")
-    prefs_str = ", ".join(known_prefs) if known_prefs else "none yet"
-    no_prefs = []
-    for k in ["genre", "mood", "tempo", "artist_or_song"]:
-        if session.get(f"no_pref_{k}", False):
-            no_prefs.append(k)
-    no_pref_str = ", ".join(no_prefs) if no_prefs else "none"
-    prompt = f"""
-You are Moodify, a conversational AI music assistant.
-- You ONLY help users with music recommendations and song suggestions.
-- If the user's message is off-topic (not related to music, moods, genres, artists, songs, etc), kindly redirect them back to music.
-- If the user types in a language other than English, politely tell them you can only respond to requests in English and ask them to rephrase in English.
-- Never answer questions about anything except music preferences or recommendations.
-Be conversational and concise. If you need more info, ask short follow-up questions about genre, mood, tempo, or artist. Do not repeat questions for things the user has already said "no preference" to. After a recommendation, ask if they like it.
-Known preferences so far: {prefs_str}.
-No preference for: {no_pref_str}.
-User said: "{last_user_message}"
+    all_keys = ["genre", "mood", "tempo", "artist_or_song"]
+    known_prefs = {k: session.get(k) for k in all_keys if session.get(k) is not None}
+    missing = [k for k in all_keys if not (session.get(k) is not None or session.get(f"no_pref_{k}", False))]
+    no_prefs = [k for k in all_keys if session.get(f"no_pref_{k}", False)]
 
-Continue the chat as a friendly, concise music assistant. 
-Be conversational and free-flowing; do not use a fixed script or ask the same question more than once.
-If you're missing genre, mood, tempo, or artist, ask about the next one, but never repeat a question if the user already said they have no preference.
-When you have enough preferences, confidently recommend a song. 
-After a recommendation, always ask the user if they like it and offer to try again or change preferences if not.
-If the user input is not in English or is irrelevant to music, explain that you only provide music recommendations in English.
-"""
+    system_prompt = (
+        "You are Moodify, a friendly, conversational AI music assistant. "
+        "Your job is to collect music preferences from the user (genre, mood, tempo, artist or song). "
+        "For each, you need a value or a clear 'no preference' message from the user - if they have no preference do not update the field. "
+        "Do NOT recommend any song until you have ALL FOUR: genre, mood, tempo, artist_or_song (or 'no preference' for each). "
+        "Ask for missing info naturally, never repeat the same question if the user already said 'no preference' for that element. "
+        "Once all are provided, you may recommend. After recommendation, always ask for feedback."
+        "If the user's message is off-topic or not in English, gently redirect them to music preferences, and ask in English."
+    )
+
+    user_prompt = (
+        f"Conversation state:\n"
+        f"Known preferences: {known_prefs}\n"
+        f"No preference for: {no_prefs}\n"
+        f"Still missing: {missing}\n"
+        f"User said: \"{last_user_message}\"\n\n"
+        "Continue the conversation to collect missing information, in a friendly way. "
+        "Only ask about elements that are still missing (not 'no preference'). "
+        "Do not give a recommendation until everything is filled."
+    )
+
     body = {
         "model": OPENAI_MODEL,
         "messages": [
-            {"role": "system", "content": "You are a friendly AI music assistant."},
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
         ],
         "temperature": 0.7,
         "max_tokens": 200
@@ -355,4 +351,5 @@ If the user input is not in English or is irrelevant to music, explain that you 
         return response.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print("OpenAI next_ai_message error:", e)
-        return "What are you in the mood for today?"
+        return "What kind of music do you feel like today?"
+

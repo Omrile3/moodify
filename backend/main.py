@@ -9,13 +9,12 @@ import logging
 
 from recommender_eng import recommend_engine
 from memory import SessionMemory
-from utils import generate_chat_response, extract_preferences_from_message, GENRES, next_ai_message
+from utils import generate_chat_response, extract_preferences_from_message, next_ai_message
 
 # Load OpenAI key
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# --- Buttons HTML ---
 BUTTONS_HTML = """
 <br>
 <div style='margin-top:10px;display:flex;gap:8px;flex-wrap:wrap'>
@@ -59,31 +58,20 @@ def has_all_preferences(session):
             return False
     return True
 
-def next_missing_preference(session):
-    """Return the next preference the user hasn't provided or skipped, in order."""
-    order = ["genre", "mood", "tempo", "artist_or_song"]
-    for key in order:
-        if not (session.get(key) is not None or session.get(f"no_pref_{key}", False)):
-            return key
-    return None
-
 def get_valid_recommendation(session):
     attempts = 0
     max_attempts = 10
     while attempts < max_attempts:
-        # Pass API key here!
         song = recommend_engine(session, api_key=OPENAI_API_KEY)
         if not song or song.get('song') == "N/A":
             return None
         spotify_url = song.get("spotify_url")
         if spotify_url and "open.spotify.com/track/" in spotify_url:
             return song
-        # Skip to next possible song (add to history and try again)
         session.setdefault("history", []).append((song.get('song'), song.get('artist')))
         attempts += 1
     return None
 
-# --- NO PREFERENCE LOGIC PATCH ---
 NO_PREF_WORDS = {
     "no", "none", "no preference", "nothing", "any", "whatever", "anything",
     "doesn't matter", "no specific preference", "all good", "whatever works", "up to you"
@@ -104,16 +92,13 @@ def recommend(preference: PreferenceInput):
     )
     session = memory.get_session(preference.session_id)
 
-    # GUARD: If awaiting feedback, do not recommend again until /command clears it!
+    # Don't recommend again if waiting for feedback
     if session.get("awaiting_feedback", False):
         return {"response": None}
 
     # Extract preferences (from NLP) and handle "no preference" intent
     extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
-    user_msg_lower = user_message.strip().lower()
-
     for key in ["genre", "mood", "tempo", "artist_or_song"]:
-        # Only update if not already set or marked as no_pref
         if session.get(key) is None and not session.get(f"no_pref_{key}", False):
             if extracted.get(key):
                 memory.update_session(preference.session_id, key, extracted[key])
@@ -124,7 +109,7 @@ def recommend(preference: PreferenceInput):
     session = memory.get_session(preference.session_id)
     all_fields = ["genre", "mood", "tempo", "artist_or_song"]
 
-    # --- Only recommend after ALL 4 are present/skipped ---
+    # 1. Only recommend after all four are present/skipped
     if has_all_preferences(session):
         song = get_valid_recommendation(session)
         if not song:
@@ -136,36 +121,24 @@ def recommend(preference: PreferenceInput):
         memory.update_session(preference.session_id, "awaiting_feedback", True)
         memory.update_session(preference.session_id, "followup_count", 0)
         return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
-    else:
-        # Ask for the next missing preference
-        next_pref = next_missing_preference(session)
-        followup_count = session.get("followup_count", 0)
-        if followup_count >= 4:
-            # Recommend with whatever info is present, fallback logic
-            fake_session = {k: session.get(k) for k in all_fields}
-            for k in all_fields:
-                if not fake_session[k]:
-                    fake_session[k] = "any"
-            song = get_valid_recommendation(fake_session)
-            if not song:
-                return {
-                    "response": "<span style='color:green'>I couldn’t find a match with a Spotify link. Want to try a different mood, artist, or genre?</span>"
-                }
-            memory.update_last_song(preference.session_id, song['song'], song['artist'])
-            gpt_message = generate_chat_response(song, fake_session, OPENAI_API_KEY)
-            memory.update_session(preference.session_id, "followup_count", 0)
-            memory.update_session(preference.session_id, "awaiting_feedback", True)
-            return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
-        # Prompt for next missing preference, conversationally
-        prompt_map = {
-            "genre": "What genre of music are you in the mood for?",
-            "mood": "What mood are you in today?",
-            "tempo": "Do you prefer your music fast, medium, or slow?",
-            "artist_or_song": "Is there a favorite artist or song you'd like to hear, or no preference?"
-        }
-        ai_message = prompt_map.get(next_pref) or next_ai_message(session, user_message, OPENAI_API_KEY)
-        memory.update_session(preference.session_id, "followup_count", followup_count + 1)
-        return {"response": f"<span style='color:green'>{ai_message}</span>"}
+
+    # 2. GPT-4o CONTROLS THE CONVERSATION: let GPT ask for missing elements!
+    # Tell GPT what's missing and what it knows, let it steer the chat:
+    known_prefs = {k: session.get(k) for k in all_fields}
+    missing = [k for k in all_fields if not (session.get(k) is not None or session.get(f"no_pref_{k}", False))]
+    no_prefs = [k for k in all_fields if session.get(f"no_pref_{k}", False)]
+
+    # Compose a context string for GPT (it can see what it knows/needs)
+    context = (
+        f"Known preferences: {known_prefs}. "
+        f"Still missing: {missing}. "
+        f"User said no preference for: {no_prefs}."
+    )
+
+    # Always ask GPT for the next response (NO hardcoded prompts)
+    ai_message = next_ai_message(session, user_message + "\n\n" + context, OPENAI_API_KEY)
+    memory.update_session(preference.session_id, "followup_count", session.get("followup_count", 0) + 1)
+    return {"response": f"<span style='color:green'>{ai_message}</span>"}
 
 @app.post("/command")
 def handle_command(command_input: CommandInput):
@@ -173,10 +146,8 @@ def handle_command(command_input: CommandInput):
     session_id = command_input.session_id
     session = memory.get_session(session_id)
 
-    # --- 1. PRIORITY: Change preferences if asked ---
     for pref in ["genre", "mood", "tempo", "artist"]:
         if f"change {pref}" in cmd or f"switch {pref}" in cmd or f"new {pref}" in cmd or (pref in cmd and "change" in cmd):
-            # Clear the current preference and ask for new value
             field = "artist_or_song" if pref == "artist" else pref
             memory.update_session(session_id, field, None)
             memory.update_session(session_id, f"no_pref_{field}", False)
@@ -185,17 +156,14 @@ def handle_command(command_input: CommandInput):
                 "response": f"<span style='color:green'>Sure! What {pref} would you like instead?</span>"
             }
 
-    # --- 2. Reset session if asked ---
     if any(word in cmd for word in ["start over", "restart", "reset"]):
         memory.reset_session(session_id)
-        session = memory.get_session(session_id)
         return {
             "response": (
                 "🔁 <span style='color:green'>Alright! Let’s start fresh. How are you feeling right now?</span>"
             )
         }
 
-    # --- 3. Recommend another song if user asks ---
     if any(word in cmd for word in ["another", "again", "next one"]):
         session["history"] = [(session.get("last_song"), session.get("last_artist"))]
         song = get_valid_recommendation(session)
@@ -206,9 +174,8 @@ def handle_command(command_input: CommandInput):
         memory.update_session(session_id, "awaiting_feedback", True)
         return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
 
-    # --- 4. Handle feedback after recommendation ---
+    # Handle feedback after recommendation
     if session.get("awaiting_feedback"):
-        # If "no", keep recommending
         if any(word in cmd for word in ["no", "didn't", "not really", "did not", "nah", "not a good fit", "not fit", "try again"]):
             last_song = session.get("last_song")
             last_artist = session.get("last_artist")
@@ -225,7 +192,6 @@ def handle_command(command_input: CommandInput):
             gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
             memory.update_session(session_id, "awaiting_feedback", True)
             return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
-        # If "yes", thank and end loop
         if any(word in cmd for word in ["yes", "love", "liked", "good", "great", "perfect", "awesome", "sure"]):
             memory.update_session(session_id, "awaiting_feedback", False)
             return {
@@ -233,14 +199,12 @@ def handle_command(command_input: CommandInput):
                     "😊 <span style='color:green'>Great! Glad you liked it. If you want to hear something else, just type 'reset' to start again any time!</span>"
                 )
             }
-        # --- 5. Try to extract new preferences from free text during feedback ---
         extracted = extract_preferences_from_message(cmd, OPENAI_API_KEY)
         extracted_any = any(extracted.get(k) for k in ["genre", "mood", "tempo", "artist_or_song"])
         if extracted_any:
             for key in ["genre", "mood", "tempo", "artist_or_song"]:
                 if extracted.get(key):
                     memory.update_session(session_id, key, extracted[key])
-            # Now recommend a new song using updated preferences
             song = get_valid_recommendation(session)
             if not song:
                 memory.update_session(session_id, "awaiting_feedback", False)
@@ -251,25 +215,20 @@ def handle_command(command_input: CommandInput):
             gpt_message = generate_chat_response(song, session, OPENAI_API_KEY)
             memory.update_session(session_id, "awaiting_feedback", True)
             return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
-        # Otherwise, fall back to generic help:
         return {"response": "<span style='color:green'>You can say 'another one', 'change genre', 'change artist', 'change mood', 'change tempo', or 'reset' to start over.</span>"}
 
-    # --- 6. If user says what they want changed, but is vague, ask for clarification ---
     if "change" in cmd or "something else" in cmd or "different" in cmd:
         return {
             "response": (
                 "<span style='color:green'>Which preference would you like to change? (genre, mood, tempo, or artist)</span>"
             )
         }
-
-    # --- 7. Generic help for anything else ---
     return {"response": "<span style='color:green'>You can say 'another one', 'change genre', 'change artist', 'change mood', 'change tempo', or 'reset' to start over.</span>"}
 
 @app.post("/reset")
 def reset_session(command_input: CommandInput):
     session_id = command_input.session_id
     memory.reset_session(session_id)
-    session = memory.get_session(session_id)
     return {
         "response": (
             "🔄 <span style='color:green'>Preferences reset! Tell me how you’re feeling or what type of music you want to hear.</span>"
