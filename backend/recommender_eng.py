@@ -13,6 +13,7 @@ from utils import (
     split_mode_category,
     build_recommendation_key,
     precompute_recommendation_map,
+    get_mood_vector,
 )
 
 # Load and prepare dataset
@@ -30,13 +31,6 @@ df = df.dropna(subset=features)
 scaler = MinMaxScaler()
 df[features] = scaler.fit_transform(df[features])
 
-# Mood vectors and recommendation map (unchanged)
-MOOD_VECTORS = {
-    "happy": [0.9, 0.8, 0.7, 0.2, 0.6],
-    "sad": [0.2, 0.3, 0.2, 0.6, 0.4],
-    "energetic": [0.7, 0.9, 0.8, 0.1, 0.8],
-    "calm": [0.5, 0.4, 0.3, 0.7, 0.5]
-}
 recommendation_map = precompute_recommendation_map(df)
 
 SAD_MOODS = {"sad", "melancholy", "down", "emotional", "blue", "heartbreak", "gloomy"}
@@ -50,7 +44,6 @@ def normalize(val):
     return val
 
 def weighted_score(row, prefs):
-    # Your existing logic here...
     mood = normalize(row.get('mode_category', '')) if 'mode_category' in row else ''
     genre = normalize(row.get('playlist_genre', '')) if 'playlist_genre' in row else ''
     tempo = normalize(row.get('tempo_category', '')) if 'tempo_category' in row else ''
@@ -103,33 +96,31 @@ def weighted_score(row, prefs):
     return score
 
 def recommend_engine(preferences: dict):
+    from utils import OPENAI_API_KEY  # For GPT-4o API key
+
     def apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=None):
         local_df = df.copy()
-        if preferences.get("mood") and preferences["mood"] not in MOOD_VECTORS:
-            preferences["mood"] = map_free_text_to_mood(preferences["mood"])
-
+        mood_str = preferences.get("mood")
+        mood_vec = None
+        # Hybrid mood vector: get vector (GPT or fallback)
+        if mood_str:
+            mood_vec = get_mood_vector(mood_str, OPENAI_API_KEY)
         if preferences.get("artist_or_song"):
             local_df = fuzzy_match_artist_song(local_df, preferences["artist_or_song"])
-
         if filter_genre and preferences.get("genre"):
             local_df = local_df[local_df['playlist_genre'].str.lower() == preferences["genre"].lower()]
-
         if filter_tempo and preferences.get("tempo"):
             bpm_range = convert_tempo_to_bpm(preferences["tempo"])
             local_df = local_df[(local_df['tempo_raw'] >= bpm_range[0]) & (local_df['tempo_raw'] <= bpm_range[1])]
-
-        if preferences.get("mood") in MOOD_VECTORS and not local_df.empty:
-            mood_vec = np.array(MOOD_VECTORS[preferences["mood"]]).reshape(1, -1)
-            similarities = cosine_similarity(mood_vec, local_df[features].values).flatten()
+        # Mood similarity (GPT-4o or fallback vector)
+        if mood_vec is not None and not local_df.empty:
+            similarities = cosine_similarity(np.array(mood_vec).reshape(1, -1), local_df[features].values).flatten()
             local_df["similarity"] = similarities
             local_df = local_df.sort_values(by="similarity", ascending=False)
-
         if exclude_artist:
             local_df = local_df[local_df["track_artist"].str.lower() != exclude_artist.lower()]
-
         return local_df
 
-    # Exclude songs in history from candidates
     def exclude_history(df, history):
         if not history:
             return df
@@ -163,12 +154,10 @@ def recommend_engine(preferences: dict):
 
     top = None
 
-    # --- Scoring logic ---
     if not filtered.empty:
         filtered = filtered.copy()
         filtered["weighted_score"] = filtered.apply(lambda row: weighted_score(row, preferences), axis=1)
         filtered = filtered.sort_values(by="weighted_score", ascending=False)
-        # Pick first not in history
         for _, row in filtered.iterrows():
             if (row["track_name"], row["track_artist"]) not in history:
                 top = row
@@ -178,7 +167,6 @@ def recommend_engine(preferences: dict):
             top = filtered.iloc[0]
             history.append((top["track_name"], top["track_artist"]))
     else:
-        # fallback logic as before
         genre = preferences.get("genre", "rock")
         tempo = preferences.get("tempo", "medium")
         mood = preferences.get("mood", "calm")
