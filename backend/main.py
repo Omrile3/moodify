@@ -109,7 +109,7 @@ def recommend(preference: PreferenceInput):
     session = memory.get_session(preference.session_id)
     all_fields = ["genre", "mood", "tempo", "artist_or_song"]
 
-    # 1. Only recommend after all four are present/skipped
+    # --- PATCH: Only recommend after all four are present/skipped! ---
     if has_all_preferences(session):
         song = get_valid_recommendation(session)
         if not song:
@@ -122,20 +122,16 @@ def recommend(preference: PreferenceInput):
         memory.update_session(preference.session_id, "followup_count", 0)
         return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
 
-    # 2. GPT-4o CONTROLS THE CONVERSATION: let GPT ask for missing elements!
-    # Tell GPT what's missing and what it knows, let it steer the chat:
+    # --- Let GPT-4o steer: ask only for missing preferences, never recommend early ---
     known_prefs = {k: session.get(k) for k in all_fields}
     missing = [k for k in all_fields if not (session.get(k) is not None or session.get(f"no_pref_{k}", False))]
     no_prefs = [k for k in all_fields if session.get(f"no_pref_{k}", False)]
-
-    # Compose a context string for GPT (it can see what it knows/needs)
     context = (
         f"Known preferences: {known_prefs}. "
         f"Still missing: {missing}. "
         f"User said no preference for: {no_prefs}."
     )
 
-    # Always ask GPT for the next response (NO hardcoded prompts)
     ai_message = next_ai_message(session, user_message + "\n\n" + context, OPENAI_API_KEY)
     memory.update_session(preference.session_id, "followup_count", session.get("followup_count", 0) + 1)
     return {"response": f"<span style='color:green'>{ai_message}</span>"}
