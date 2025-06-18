@@ -76,3 +76,33 @@ BUTTONS_HTML = """
 POSITIVE_FEEDBACK = {"yes", "love", "liked", "good", "great", "perfect", "awesome", "sure"}
 NEGATIVE_FEEDBACK = {"no", "didn't", "not really", "did not", "nah", "not a good fit", "not fit", "try again"}
 CHANGE_COMMANDS = {"change", "switch", "new"}
+
+# Song recommendation categories
+SAD_MOODS = {"sad", "melancholy", "down", "emotional", "blue", "heartbreak", "gloomy"}
+HAPPY_MOODS = {"happy", "joy", "energetic", "upbeat", "party", "celebrate", "excited"}
+UPBEAT_WORDS = {"upbeat", "party", "dance", "energetic", "celebrate", "hyped", "intense"}
+SLOW_WORDS = {"slow", "ballad", "chill", "calm"}
+
+# Similarity detection keywords
+SIMILARITY_KEYWORDS = {
+    "similar to", "like", "vibe like", "in the style of",
+    "another artist like", "by a similar artist", "reminiscent of", 
+    "same vibe as", "any artist"
+}
+
+# Scoring weights for recommendation engine
+SCORE_WEIGHTS = {
+    "genre_match": 8,
+    "mood_match": 8,
+    "tempo_match": 8,
+    "artist_match": 2,
+    "popularity": 1,
+    "mood_mismatch": -10,
+    "tempo_mismatch": -5
+}
+
+# Data paths
+DATA_PATH = "data/songs.csv"
+
+# Features for recommendation engine
+AUDIO_FEATURES = ['valence', 'energy', 'danceability', 'acousticness', 'tempo']
