@@ -101,10 +101,9 @@ def recommend(preference: PreferenceInput):
     if session.get("awaiting_feedback", False):
         return {"response": None}
 
-    extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
-
     # Only update the field the bot is currently asking for
     if field_being_asked:
+        extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
         val = extracted.get(field_being_asked)
         if val:
             memory.update_session(preference.session_id, field_being_asked, val)

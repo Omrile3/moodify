@@ -119,8 +119,24 @@ function appendBotMessage(msgOrObj) {
     }
   }
 
-  let html = `<p class="green-response"><strong>Moodify:</strong> ${msg}</p>`;
+  // Remove any invalid/empty Spotify URLs
+  if (
+    spotifyUrl &&
+    (
+      !/track\/[a-zA-Z0-9]{22}$/.test(spotifyUrl) ||
+      spotifyUrl.endsWith('/track/none') ||
+      spotifyUrl.endsWith('/track/')
+    )
+  ) {
+    spotifyUrl = null;
+  }
 
+  // Remove any 'Listen on Spotify' hyperlink if embedding
+  let cleanMsg = msg.replace(/<a [^>]+>(Listen on Spotify)?<\/a>/ig, '').replace(/https:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+/g, '');
+
+  let html = `<p class="green-response"><strong>Moodify:</strong> ${cleanMsg}</p>`;
+
+  // Only embed if valid track id
   if (spotifyUrl) {
     const idMatch = spotifyUrl.match(/track\/([a-zA-Z0-9]{22})/);
     if (idMatch && idMatch[1] && idMatch[1].toLowerCase() !== "none") {
@@ -130,8 +146,6 @@ function appendBotMessage(msgOrObj) {
         </div>
       `;
     }
-    html = html.replace(/<a [^>]+>(Listen on Spotify)?<\/a>/ig, '').replace(/https:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+/g, '');
-    html = `<p class="green-response"><strong>Moodify:</strong> ${msg.replace(/<a [^>]+>(Listen on Spotify)?<\/a>/ig, '').replace(/https:\/\/open\.spotify\.com\/track\/[a-zA-Z0-9]+/g, '')}</p>` + html.split('</p>')[1];
   }
 
   chatBox.innerHTML += html;
