@@ -1,14 +1,8 @@
 """Functions for handling user preferences and preference extraction."""
 
 from typing import Dict, Optional, List, Tuple
-from constants import (
-    PREFERENCE_FIELDS, 
-    NO_PREF_WORDS,
-    VAGUE_TO_MOOD,
-    MOODS,
-    GENRES
-)
-from utils import extract_preferences_from_message, fuzzy_match_word
+from constants import PREFERENCE_FIELDS
+from extraction import extract_preferences_raw, process_preferences
 
 def extract_user_preferences(message: str, api_key: str) -> Dict[str, Optional[str]]:
     """
@@ -21,8 +15,10 @@ def extract_user_preferences(message: str, api_key: str) -> Dict[str, Optional[s
     Returns:
         Dictionary with extracted preferences or None for unspecified preferences
     """
-    extracted = extract_preferences_from_message(message, api_key)
-    return {field: extracted.get(field) for field in PREFERENCE_FIELDS}
+    # First extract raw preferences from the message
+    raw_preferences = extract_preferences_raw(message, api_key)
+    # Then process them with the original message context for "no preference" detection
+    return process_preferences(raw_preferences, message)
 
 def update_session_preferences(session: dict, extracted: dict) -> None:
     """
@@ -37,7 +33,8 @@ def update_session_preferences(session: dict, extracted: dict) -> None:
             if extracted.get(field):
                 session[field] = extracted[field]
                 session[f"no_pref_{field}"] = False
-            elif _has_no_preference_keywords(message):
+            # If GPT returned None for this field or marked it as "not music"
+            elif extracted.get("_not_music") or any(extracted.get(k) and extracted[k] is None for k in PREFERENCE_FIELDS):
                 session[f"no_pref_{field}"] = True
 
 def _is_preference_set(session: dict, field: str) -> bool:
@@ -52,19 +49,6 @@ def _is_preference_set(session: dict, field: str) -> bool:
         True if preference is set or marked as no preference
     """
     return session.get(field) is not None or session.get(f"no_pref_{field}", False)
-
-def _has_no_preference_keywords(message: str) -> bool:
-    """
-    Check if message contains 'no preference' indicators.
-    
-    Args:
-        message: User input message
-    
-    Returns:
-        True if message indicates no preference
-    """
-    message_lower = message.lower()
-    return any(keyword in message_lower for keyword in NO_PREF_WORDS)
 
 def has_all_preferences(session: dict) -> bool:
     """
@@ -95,41 +79,3 @@ def get_missing_preferences(session: dict) -> List[str]:
         field for field in PREFERENCE_FIELDS 
         if not _is_preference_set(session, field)
     ]
-
-def validate_preference(field: str, value: str) -> Tuple[bool, Optional[str]]:
-    """
-    Validate a preference value for a specific field.
-    
-    Args:
-        field: Preference field to validate
-        value: Value to validate
-    
-    Returns:
-        Tuple of (is_valid, corrected_value)
-    """
-    if not value:
-        return False, None
-        
-    value = value.lower().strip()
-    
-    if field == "mood":
-        corrected = fuzzy_match_word(value, MOODS)
-        if corrected:
-            return True, corrected
-        # Check vague mood mappings
-        if value in VAGUE_TO_MOOD:
-            return True, VAGUE_TO_MOOD[value]
-            
-    elif field == "genre":
-        corrected = fuzzy_match_word(value, GENRES)
-        if corrected:
-            return True, corrected
-            
-    elif field == "tempo":
-        if value in ["slow", "medium", "fast"]:
-            return True, value
-            
-    elif field == "artist_or_song":
-        return True, value
-        
-    return False, None

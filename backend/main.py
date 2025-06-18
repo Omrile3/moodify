@@ -9,19 +9,23 @@ import logging
 
 from recommender_eng import recommend_engine
 from memory import SessionMemory
-from utils import generate_chat_response, next_ai_message
 from preferences import (
     extract_user_preferences,
     update_session_preferences,
     has_all_preferences,
     get_missing_preferences
 )
+from utils import (
+    generate_chat_response,
+    next_ai_message
+)
 from constants import (
     BUTTONS_HTML,
     POSITIVE_FEEDBACK,
     NEGATIVE_FEEDBACK,
     CHANGE_COMMANDS,
-    PREFERENCE_FIELDS
+    PREFERENCE_FIELDS,
+    OPENAI_MODEL
 )
 
 # Load OpenAI key
