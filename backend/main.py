@@ -86,10 +86,6 @@ def recommend(preference: PreferenceInput):
     session = memory.get_session(preference.session_id)
     all_fields = ["genre", "mood", "tempo", "artist_or_song"]
 
-    # Figure out which field is missing (ask for only one at a time)
-    missing = [k for k in all_fields if not (session.get(k) is not None or session.get(f"no_pref_{k}", False))]
-    field_being_asked = missing[0] if missing else None
-
     user_message = (
         preference.artist_or_song
         or preference.genre
@@ -97,23 +93,26 @@ def recommend(preference: PreferenceInput):
         or preference.tempo
         or ""
     )
+
     # Block multiple recommends if waiting for feedback
     if session.get("awaiting_feedback", False):
         return {"response": None}
 
-    # Only update the field the bot is currently asking for
-    if field_being_asked:
-        extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
-        val = extracted.get(field_being_asked)
-        if val:
-            memory.update_session(preference.session_id, field_being_asked, val)
-            memory.update_session(preference.session_id, f"no_pref_{field_being_asked}", False)
-        elif user_message_is_no_pref(user_message):
-            memory.update_session(preference.session_id, f"no_pref_{field_being_asked}", True)
+    extracted = extract_preferences_from_message(user_message, OPENAI_API_KEY)
+
+    # Update every missing preference with extracted value or mark as "no preference" if user said so
+    for key in all_fields:
+        if session.get(key) is None and not session.get(f"no_pref_{key}", False):
+            val = extracted.get(key)
+            if val:
+                memory.update_session(preference.session_id, key, val)
+                memory.update_session(preference.session_id, f"no_pref_{key}", False)
+            elif user_message_is_no_pref(user_message):
+                memory.update_session(preference.session_id, f"no_pref_{key}", True)
 
     session = memory.get_session(preference.session_id)
 
-    # Only recommend after all are present/skipped
+    # Only recommend after all preferences are present/skipped
     if has_all_preferences(session):
         song = get_valid_recommendation(session)
         if not song:
@@ -126,7 +125,7 @@ def recommend(preference: PreferenceInput):
         memory.update_session(preference.session_id, "followup_count", 0)
         return {"response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"}
 
-    # Otherwise, let GPT steer, always ask for just one missing preference at a time
+    # Otherwise, ask for the next missing one
     known_prefs = {k: session.get(k) for k in all_fields}
     missing = [k for k in all_fields if not (session.get(k) is not None or session.get(f"no_pref_{k}", False))]
     no_prefs = [k for k in all_fields if session.get(f"no_pref_{k}", False)]
