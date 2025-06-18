@@ -1,14 +1,14 @@
 """Functions for handling user preferences and preference extraction."""
 
 from typing import Dict, Optional, List, Tuple
-from .constants import (
+from constants import (
     PREFERENCE_FIELDS, 
     NO_PREF_WORDS,
     VAGUE_TO_MOOD,
     MOODS,
     GENRES
 )
-from .utils import extract_preferences_from_message, fuzzy_match_word
+from utils import extract_preferences_from_message, fuzzy_match_word
 
 def extract_user_preferences(message: str, api_key: str) -> Dict[str, Optional[str]]:
     """
