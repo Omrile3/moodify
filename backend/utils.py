@@ -1,6 +1,7 @@
 """Utility functions for the Moodify backend."""
 
 import difflib
+import re
 import requests
 import pandas as pd
 from prompts import (
@@ -164,7 +165,6 @@ def get_mood_vector(mood: str, api_key: str) -> list:
         text = response.json()["choices"][0]["message"]["content"].strip()
         
         # Extract and validate vector
-        import re
         match = re.search(r"\[([^\[\]]+)\]", text)
         if match:
             arr = match.group(0)
