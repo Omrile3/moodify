@@ -187,6 +187,7 @@ def build_conversation_context(session: dict) -> str:
 @app.post("/recommend")
 def recommend(preference: PreferenceInput):
     """Handle user's preference input and provide recommendations."""
+    logger.info(f"Received recommend request for session {preference.session_id}")
     # Block multiple recommends if waiting for feedback
     session = memory.get_session(preference.session_id)
     if session.get("awaiting_feedback", False):
@@ -299,7 +300,8 @@ def get_session(session_id: str):
 async def global_exception_handler(request, exc):
     import traceback
     error_details = traceback.format_exc()
-    print(f"Unhandled exception: {exc}\nDetails:\n{error_details}")
+    logger.error(f"Unhandled exception: {exc}")
+    logger.error(f"Details:\n{error_details}")
     return JSONResponse(
         status_code=500,
         content={"message": "An unexpected error occurred. Please try again later."},
@@ -311,4 +313,5 @@ def test_cors():
 
 if __name__ == "__main__":
     import uvicorn
+    logger.info("Starting Moodify backend server...")
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", "10000")), reload=True)
