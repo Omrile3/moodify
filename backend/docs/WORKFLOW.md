@@ -10,6 +10,7 @@ graph TB
         FastAPI -->|Log: session state| SessionHandler[Session Handler]
         SessionHandler -->|Get State| Memory[(Memory Store)]
         Memory -->|Return State| SessionHandler
+        SessionHandler -->|Format Response| Messages[Messages Handler]
     end
     
     subgraph PreferenceProcessing[Preference Processing - preferences.py, extraction.py]
@@ -41,7 +42,8 @@ graph TB
     subgraph MemoryOps[Memory Operations - memory.py]
         ResponseFormat -->|Log: final song| UpdateHistory[Update History]
         UpdateHistory -->|Store| Memory
-        Memory -->|Log: session updated| Client
+        Memory -->|Log: session updated| Messages
+        Messages -->|Formatted Response| Client
     end
 
     %% Error Handling Paths
@@ -57,6 +59,21 @@ graph TB
 
 ## Component Responsibilities
 
+### messages.py (Messages Handler)
+- Centralizes all user-facing message content
+- Organizes messages into logical categories:
+  - Greeting messages
+  - Recommendation responses
+  - Feedback handling
+  - Preference change prompts
+  - Reset/restart messages
+  - Error messages
+- Provides utility methods for consistent formatting:
+  - Green text wrapping
+  - Emoji addition
+  - Message templating
+- Improves maintainability and consistency of user communication
+
 ### main.py (Main Handler)
 - Handles HTTP endpoints and session state
 - Routes messages to appropriate handlers
@@ -64,6 +81,7 @@ graph TB
 - Coordinates between components
 - Implements global error handling
 - Handles user commands and feedback
+- Uses Messages class for user communication
 
 ### preferences.py & extraction.py (Preference Processing)
 - **preferences.py**:
@@ -122,6 +140,7 @@ graph TB
    - User input extraction and validation
    - Initial greeting check (for new sessions)
    - Preference processing routing
+   - Message formatting through Messages class
 
 2. **Preference Processing** (preferences.py, extraction.py)
    - Raw message sent to GPT
@@ -141,15 +160,40 @@ graph TB
    - Song ranking
    - Selection validation
    - Spotify URL verification
-   - Response formatting
+   - Response formatting with Messages class
 
 5. **State Update** (memory.py)
    - History tracking
    - Preference persistence
    - Session management
-   - Response delivery
+   - Message formatting and delivery
 
 ## Key Features
+
+### Messages Structure
+```python
+class Messages:
+    class Greeting:
+        WELCOME = str  # Initial greeting message
+    
+    class Recommendations:
+        NO_SONG_FOUND = str  # No song found message
+        FEEDBACK_BUTTONS = str  # Feedback request
+        POSITIVE_FEEDBACK = str  # Positive feedback response
+    
+    class Preferences:
+        CHANGE_OPTIONS = str  # Preference change options
+        CHANGE_FIELD = str  # Field change template
+        INVALID_LAST_SONG = str  # Invalid song message
+        AVAILABLE_COMMANDS = str  # Available commands list
+    
+    class Reset:
+        CONFIRM = str  # Reset confirmation
+        START_FRESH = str  # Start fresh message
+    
+    class Error:
+        GENERIC = str  # Generic error message
+```
 
 ### Session State
 ```python
@@ -176,6 +220,7 @@ graph TB
 - Filter relaxation
 - Input validation
 - Session recovery
+- Centralized error messages
 
 ### Performance Features
 - Precomputed recommendation maps
@@ -183,3 +228,4 @@ graph TB
 - Thread-safe operations
 - History deduplication
 - Structured logging throughout pipeline
+- Consistent message formatting

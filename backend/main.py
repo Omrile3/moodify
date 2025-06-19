@@ -29,6 +29,7 @@ from constants import (
     PREFERENCE_FIELDS,
     OPENAI_MODEL
 )
+from messages import Messages
 
 # Load OpenAI key
 load_dotenv()
@@ -120,7 +121,7 @@ def handle_song_recommendation(session_id: str, song: dict) -> dict:
     if not song:
         logger.info(f"No song found for session {session_id}")
         return {
-            "response": "<span style='color:green'>I couldn't find a song with a Spotify link. Want to change your preferences?</span>"
+            "response": Messages.wrap_green(Messages.Recommendations.NO_SONG_FOUND)
         }
     
     # Update session with new song
@@ -130,7 +131,7 @@ def handle_song_recommendation(session_id: str, song: dict) -> dict:
     memory.update_session(session_id, "awaiting_feedback", True)
     
     return {
-        "response": f"<span style='color:green'>{gpt_message}</span><br>Are you happy with this recommendation?{BUTTONS_HTML}"
+        "response": f"{Messages.wrap_green(gpt_message)}<br>{Messages.Recommendations.FEEDBACK_BUTTONS}{BUTTONS_HTML}"
     }
 
 
@@ -152,7 +153,7 @@ def handle_preference_change(session_id: str, field: str) -> dict:
     
     display_field = "artist" if field == "artist_or_song" else field
     return {
-        "response": f"<span style='color:green'>Sure! What {display_field} would you like instead?</span>"
+        "response": Messages.wrap_green(Messages.Preferences.CHANGE_FIELD.format(field=display_field))
     }
 
 def handle_user_message(session_id: str, message: str) -> dict:
@@ -191,7 +192,7 @@ def handle_user_message(session_id: str, message: str) -> dict:
     ai_message = next_ai_message(session, message + "\n\n" + context, OPENAI_API_KEY)
     memory.update_session(session_id, "followup_count", session.get("followup_count", 0) + 1)
     
-    return {"response": f"<span style='color:green'>{ai_message}</span>"}
+    return {"response": Messages.wrap_green(ai_message)}
 
 def build_conversation_context(session: dict) -> str:
     """
@@ -243,7 +244,7 @@ def recommend(preference: PreferenceInput):
         memory.update_session(preference.session_id, "greeted", True)
         log_dict_info("New session, asking for initial preferences", session_id=preference.session_id)
         return {
-            "response": "<span style='color:green'>Hi! I'm here to help you find music that matches your mood. How are you feeling right now? Or what kind of music would you like to hear?</span>"
+            "response": Messages.wrap_green(Messages.Greeting.WELCOME)
         }
 
     # Block multiple recommends if waiting for feedback
@@ -280,9 +281,7 @@ def handle_command(command_input: CommandInput):
         logger.info(f"Resetting session {session_id}")
         memory.reset_session(session_id)
         return {
-            "response": (
-                "🔁 <span style='color:green'>Alright! Let’s start fresh. How are you feeling right now?</span>"
-            )
+            "response": Messages.with_emoji(Messages.wrap_green(Messages.Reset.START_FRESH), "🔁")
         }
 
     if any(word in cmd for word in ["another", "again", "next one"]):
@@ -299,7 +298,7 @@ def handle_command(command_input: CommandInput):
         if not last_song or not last_artist:
             memory.update_session(session_id, "awaiting_feedback", False)
             return {
-                "response": "<span style='color:green'>I couldn't find your last song. Let's start fresh - what kind of music do you want to hear?</span>"
+                "response": Messages.wrap_green(Messages.Preferences.INVALID_LAST_SONG)
             }
         
         if any(word in cmd for word in NEGATIVE_FEEDBACK):
@@ -316,9 +315,7 @@ def handle_command(command_input: CommandInput):
             logger.info(f"Positive feedback received for song: {last_song} by {last_artist}")
             memory.update_session(session_id, "awaiting_feedback", False)
             return {
-                "response": (
-                    "😊 <span style='color:green'>Great! Glad you liked it. If you want to hear something else, just type 'reset' to start again any time!</span>"
-                )
+                "response": Messages.with_emoji(Messages.wrap_green(Messages.Recommendations.POSITIVE_FEEDBACK), "😊")
             }
         # Check for new preferences in feedback
         logger.info(f"Checking for new preferences in feedback: {cmd}")
@@ -329,15 +326,13 @@ def handle_command(command_input: CommandInput):
                     memory.update_session(session_id, key, extracted[key])
             song = get_valid_recommendation(session)
             return handle_song_recommendation(session_id, song)
-        return {"response": "<span style='color:green'>You can say 'another one', 'change genre', 'change artist', 'change mood', 'change tempo', or 'reset' to start over.</span>"}
+        return {"response": Messages.wrap_green(Messages.Preferences.AVAILABLE_COMMANDS)}
 
     if "change" in cmd or "something else" in cmd or "different" in cmd:
         return {
-            "response": (
-                "<span style='color:green'>Which preference would you like to change? (genre, mood, tempo, or artist)</span>"
-            )
+            "response": Messages.wrap_green(Messages.Preferences.CHANGE_OPTIONS)
         }
-    return {"response": "<span style='color:green'>You can say 'another one', 'change genre', 'change artist', 'change mood', 'change tempo', or 'reset' to start over.</span>"}
+    return {"response": Messages.wrap_green(Messages.Preferences.AVAILABLE_COMMANDS)}
 
 @app.post("/reset")
 def reset_session(command_input: CommandInput):
@@ -345,9 +340,7 @@ def reset_session(command_input: CommandInput):
     memory.reset_session(session_id)
     memory.update_session(session_id, "greeted", False)  # Reset greeting flag
     return {
-        "response": (
-            "🔄 <span style='color:green'>Preferences reset! Tell me how you’re feeling or what type of music you want to hear.</span>"
-        )
+        "response": Messages.with_emoji(Messages.wrap_green(Messages.Reset.CONFIRM), "🔄")
     }
 
 @app.get("/session/{session_id}")
@@ -363,7 +356,7 @@ async def global_exception_handler(request, exc):
         traceback=error_details)
     return JSONResponse(
         status_code=500,
-        content={"message": "An unexpected error occurred. Please try again later."},
+        content={"message": Messages.Error.GENERIC},
     )
 
 @app.get("/test-cors")
