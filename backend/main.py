@@ -229,8 +229,18 @@ def recommend(preference: PreferenceInput):
 
     session = memory.get_session(preference.session_id)
     
-    # For a new session, ask for initial preference
-    if not any([session.get(field) for field in PREFERENCE_FIELDS]):
+    # Get user message from any preference field
+    user_message = (
+        preference.artist_or_song
+        or preference.genre
+        or preference.mood
+        or preference.tempo
+        or ""
+    )
+    
+    # Only show initial greeting if no message and no preferences
+    if not user_message and not any([session.get(field) for field in PREFERENCE_FIELDS]) and not session.get("greeted"):
+        memory.update_session(preference.session_id, "greeted", True)
         log_dict_info("New session, asking for initial preferences", session_id=preference.session_id)
         return {
             "response": "<span style='color:green'>Hi! I'm here to help you find music that matches your mood. How are you feeling right now? Or what kind of music would you like to hear?</span>"
@@ -239,15 +249,6 @@ def recommend(preference: PreferenceInput):
     # Block multiple recommends if waiting for feedback
     if session.get("awaiting_feedback", False):
         return {"response": None}
-
-    # Process user message
-    user_message = (
-        preference.artist_or_song
-        or preference.genre
-        or preference.mood
-        or preference.tempo
-        or ""
-    )
     
     return handle_user_message(preference.session_id, user_message)
 
@@ -342,6 +343,7 @@ def handle_command(command_input: CommandInput):
 def reset_session(command_input: CommandInput):
     session_id = command_input.session_id
     memory.reset_session(session_id)
+    memory.update_session(session_id, "greeted", False)  # Reset greeting flag
     return {
         "response": (
             "🔄 <span style='color:green'>Preferences reset! Tell me how you’re feeling or what type of music you want to hear.</span>"

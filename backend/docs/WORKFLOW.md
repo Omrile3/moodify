@@ -119,7 +119,9 @@ graph TB
 1. **Request Reception** (main.py)
    - User message received at `/recommend`
    - Session state loaded
-   - Request validation
+   - User input extraction and validation
+   - Initial greeting check (for new sessions)
+   - Preference processing routing
 
 2. **Preference Processing** (preferences.py, extraction.py)
    - Raw message sent to GPT
@@ -157,7 +159,8 @@ graph TB
     "tempo": str | None,
     "artist_or_song": str | None,
     "awaiting_feedback": bool,
-    "history": List[Tuple[str, str]]
+    "history": List[Tuple[str, str]],
+    "greeted": bool                     # Tracks if initial greeting was shown
 }
 ```
 
