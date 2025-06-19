@@ -3,21 +3,10 @@
 from typing import Dict, List, Optional, Tuple, Any
 import numpy as np
 import pandas as pd
-import logging
 from sklearn.metrics.pairwise import cosine_similarity
 from utils import convert_tempo_to_bpm, fuzzy_match_artist_song
 from constants import SIMILARITY_KEYWORDS
-
-# Configure logging
-logger = logging.getLogger(__name__)
-
-def log_dict_info(message: str, **kwargs):
-    """Helper function for structured logging."""
-    logger.info(message, extra={"data": str(kwargs)})
-
-def log_dict_warning(message: str, **kwargs):
-    """Helper function for structured warning logging."""
-    logger.warning(message, extra={"data": str(kwargs)})
+from log_utils import log_dict_info, log_dict_warning
 
 def apply_mood_filter(df: pd.DataFrame, mood_vec: Optional[np.ndarray], features: List[str]) -> pd.DataFrame:
     """

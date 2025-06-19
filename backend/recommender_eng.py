@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import random
 from sklearn.preprocessing import MinMaxScaler
-import logging
 
 from utils import (
     bpm_to_tempo_category,
@@ -17,17 +16,7 @@ from constants import (
 from scoring import calculate_weighted_score
 from filters import apply_all_filters
 from constants import PREFERENCE_FIELDS
-
-# Configure logging with structured format
-logger = logging.getLogger(__name__)
-
-def log_dict_info(message: str, **kwargs):
-    """Helper function for structured logging."""
-    logger.info(message, extra={"data": str(kwargs)})
-
-def log_dict_warning(message: str, **kwargs):
-    """Helper function for structured warning logging."""
-    logger.warning(message, extra={"data": str(kwargs)})
+from log_utils import log_dict_info, log_dict_warning
 
 def load_and_process_data() -> tuple[pd.DataFrame, dict]:
     """
