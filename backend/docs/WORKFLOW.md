@@ -12,15 +12,13 @@ sequenceDiagram
     participant Memory (memory.py)
 
     Client->>FastAPI (main.py): POST /recommend
-    FastAPI (main.py)->>FastAPI (main.py): Determine target preference
-    FastAPI (main.py)->>PreferenceHandler (preferences.py): extract_user_preferences(message, target_preference)
-    PreferenceHandler (preferences.py)->>Extraction (extraction.py): extract_preferences_raw(message, target_preference)
-    Extraction (extraction.py)->>Extraction (extraction.py): Select prompt based on target
-    Extraction (extraction.py)->>GPT: Call GPT with focused/general prompt
+    FastAPI (main.py)->>PreferenceHandler (preferences.py): extract_user_preferences(message)
+    PreferenceHandler (preferences.py)->>Extraction (extraction.py): extract_preferences_raw(message)
+    Extraction (extraction.py)->>GPT: Call GPT with preference extraction prompt
     GPT-->>Extraction (extraction.py): Raw preferences
-    Extraction (extraction.py)->>Extraction (extraction.py): process_preferences(raw, target_preference)
+    Extraction (extraction.py)->>Extraction (extraction.py): process_preferences(raw)
     Extraction (extraction.py)-->>PreferenceHandler (preferences.py): Processed preferences
-    PreferenceHandler (preferences.py)->>Memory (memory.py): Update session with target context
+    PreferenceHandler (preferences.py)->>Memory (memory.py): Update session
     Memory (memory.py)-->>FastAPI (main.py): Updated session
     FastAPI (main.py)-->>Client: Response
 ```
@@ -32,19 +30,15 @@ sequenceDiagram
 - Manages session state
 - Routes user messages to appropriate handlers
 - Coordinates the recommendation flow
-- Tracks and manages target preference context
-- Handles preference change commands
 
 ### preferences.py
 - Manages preference extraction workflow
 - Updates session with new preferences
 - Tracks preference state (set/not set)
 - Determines when all preferences are collected
-- Handles targeted preference updates
 
 ### extraction.py
 - Handles raw GPT API communication for preference extraction
-- Supports both focused and general preference extraction
 - Processes and validates extracted preferences
 - Manages preference normalization and validation
 - Handles special cases (no preference, not music, etc.)
@@ -57,7 +51,6 @@ sequenceDiagram
 
 ### prompts.py
 - Centralizes all GPT prompts
-- Maintains both focused and general extraction prompts
 - Defines system roles for different GPT contexts
 - Configures GPT settings for each prompt type
 - Maintains prompt templates
@@ -72,32 +65,28 @@ sequenceDiagram
 - Manages session storage
 - Handles preference persistence
 - Tracks conversation state
-- Maintains target preference context
 
 ## Preference Processing Flow
 
 1. **Input Reception**
    - User sends message to `/recommend` endpoint
-   - System determines target preference based on context
    - Message can be explicit preference or conversation
 
-2. **Target Preference Resolution**
+2. **Preference Extraction**
    ```python
    # main.py
-   target_preference = determine_target_preference(session, preference)
-   extract_user_preferences(message, OPENAI_API_KEY, target_preference)
+   user_message = preference.artist_or_song or preference.genre or preference.mood or preference.tempo or ""
+   extract_user_preferences(message, OPENAI_API_KEY)
    ```
 
 3. **GPT Processing**
-   - System selects appropriate prompt based on target preference
-   - Raw message sent to GPT with context about target preference
-   - GPT returns structured preference data focused on target
+   - Raw message sent to GPT for initial extraction
+   - GPT returns structured preference data
    - Response is processed and validated
    - Special cases are handled (no preference, not music)
 
 4. **Session Update**
    - New preferences are merged with existing session
-   - Target preference context is maintained
    - Missing preferences are tracked
    - "No preference" states are recorded
 
@@ -119,16 +108,6 @@ sequenceDiagram
 - Has all preferences
 - Missing preferences
 - No preference markers
-- Current target preference
-
-### Extraction Modes
-- Focused extraction (when target preference is known)
-- General extraction (when processing open-ended input)
-
-### Preference Update Logic
-- Target preference overrides existing values
-- Non-target preferences only set if explicitly mentioned
-- No-preference handling per target
 
 ### Error Handling
 - Invalid preferences
@@ -138,8 +117,7 @@ sequenceDiagram
 
 ### Prompt Management
 - System roles for different contexts
-- Focused extraction prompts
-- General extraction prompts
+- Customizable prompt templates
 - GPT parameter configurations
 - Fallback responses
 

@@ -1,19 +1,5 @@
 """Centralized storage for all GPT prompts used in the application."""
 
-FOCUSED_PREFERENCE_EXTRACTION_PROMPT = """You are an AI that extracts a specific music preference from user input in English.
-We are specifically asking about the {target_preference} preference.
-For the 'mood' field, only use one of these values (case-insensitive, single word): {available_moods}.
-
-IMPORTANT: Focus on extracting the {target_preference} from the user's response.
-Set other preferences to null unless they are EXPLICITLY mentioned.
-If the message doesn't contain a clear {target_preference}, set it to null.
-
-If the message is not in English, reply ONLY with this: '__NOT_ENGLISH__'.
-If the message is not about music, reply ONLY with this: '__NOT_MUSIC__'.
-
-Respond only in valid JSON with exactly these 4 keys: genre, mood, tempo, artist_or_song.
-Never infer or guess outside the specified set for moods."""
-
 PREFERENCE_EXTRACTION_PROMPT = """You are an AI that extracts ONLY music preferences from user input in English.
 For the 'mood' field, only use one of these values (case-insensitive, single word): {available_moods}.
 If the user's input doesn't clearly match a mood in the list, set 'mood' to null.

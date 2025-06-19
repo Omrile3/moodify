@@ -4,24 +4,23 @@ from typing import Dict, Optional, List, Tuple
 from constants import PREFERENCE_FIELDS
 from extraction import extract_preferences_raw, process_preferences
 
-def extract_user_preferences(message: str, api_key: str, target_preference: Optional[str] = None) -> Dict[str, Optional[str]]:
+def extract_user_preferences(message: str, api_key: str) -> Dict[str, Optional[str]]:
     """
-    Extract preferences from a single message.
+    Extract all preferences from a single message.
     
     Args:
         message: User input message
         api_key: OpenAI API key for preference extraction
-        target_preference: Specific preference being asked about
     
     Returns:
         Dictionary with extracted preferences or None for unspecified preferences
     """
-    # Extract raw preferences from the message with target context
-    raw_preferences = extract_preferences_raw(message, api_key, target_preference)
-    # Process them with the message context and target preference
-    return process_preferences(raw_preferences, message, target_preference)
+    # First extract raw preferences from the message
+    raw_preferences = extract_preferences_raw(message, api_key)
+    # Then process them with the original message context for "no preference" detection
+    return process_preferences(raw_preferences, message)
 
-def update_session_preferences(session: dict, extracted: dict, target_preference: Optional[str] = None) -> None:
+def update_session_preferences(session: dict, extracted: dict) -> None:
     """
     Update session with extracted preferences.
     
@@ -30,16 +29,13 @@ def update_session_preferences(session: dict, extracted: dict, target_preference
         extracted: Dictionary of extracted preferences
     """
     for field in PREFERENCE_FIELDS:
-        # Always update if this is the target preference or if preference isn't set yet
-        if (field == target_preference) or (not _is_preference_set(session, field)):
+        if not _is_preference_set(session, field):
             if extracted.get(field):
                 session[field] = extracted[field]
                 session[f"no_pref_{field}"] = False
             # If GPT returned None for this field or marked it as "not music"
             elif extracted.get("_not_music") or any(extracted.get(k) and extracted[k] is None for k in PREFERENCE_FIELDS):
-                if field == target_preference:
-                    session[f"no_pref_{field}"] = True
-                    session[field] = None
+                session[f"no_pref_{field}"] = True
 
 def _is_preference_set(session: dict, field: str) -> bool:
     """

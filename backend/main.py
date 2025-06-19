@@ -133,26 +133,25 @@ def handle_preference_change(session_id: str, field: str) -> dict:
         "response": f"<span style='color:green'>Sure! What {display_field} would you like instead?</span>"
     }
 
-def handle_user_message(session_id: str, message: str, target_preference: Optional[str] = None) -> dict:
+def handle_user_message(session_id: str, message: str) -> dict:
     """
     Process user message and update preferences.
     
     Args:
         session_id: Session identifier
         message: User input message
-        target_preference: Specific preference being asked about
     
     Returns:
         API response dictionary
     """
     session = memory.get_session(session_id)
     
-    # Extract preferences from message with target context
-    extracted = extract_user_preferences(message, OPENAI_API_KEY, target_preference)
+    # Extract preferences from message
+    extracted = extract_user_preferences(message, OPENAI_API_KEY)
     logger.info(f"Extracted preferences: {extracted}")
     
     # Update session with new preferences
-    update_session_preferences(session, extracted, target_preference)
+    update_session_preferences(session, extracted)
     logger.debug(f"Updated session preferences: {session}")
     
     # If all preferences are set, return recommendation
@@ -198,30 +197,16 @@ def recommend(preference: PreferenceInput):
     if session.get("awaiting_feedback", False):
         return {"response": None}
 
-    # Determine target preference from missing fields
-    target_preference = None
-    missing = get_missing_preferences(session)
-    if missing:
-        target_preference = missing[0]
-        
-    # Get message and corresponding preference field
-    if preference.artist_or_song:
-        user_message = preference.artist_or_song
-        target_preference = "artist_or_song"
-    elif preference.genre:
-        user_message = preference.genre
-        target_preference = "genre"
-    elif preference.mood:
-        user_message = preference.mood
-        target_preference = "mood"
-    elif preference.tempo:
-        user_message = preference.tempo
-        target_preference = "tempo"
-    else:
-        user_message = ""
-
-    logger.info(f"Target preference: {target_preference}")
-    return handle_user_message(preference.session_id, user_message, target_preference)
+    # Process user message
+    user_message = (
+        preference.artist_or_song
+        or preference.genre
+        or preference.mood
+        or preference.tempo
+        or ""
+    )
+    
+    return handle_user_message(preference.session_id, user_message)
 
 @app.post("/command")
 def handle_command(command_input: CommandInput):
@@ -236,8 +221,6 @@ def handle_command(command_input: CommandInput):
     for pref in ["genre", "mood", "tempo", "artist"]:
         if f"change {pref}" in cmd or f"switch {pref}" in cmd or f"new {pref}" in cmd or (pref in cmd and "change" in cmd):
             field = "artist_or_song" if pref == "artist" else pref
-            # Store the target preference in session for future use
-            memory.update_session(session_id, "current_target_preference", field)
             return handle_preference_change(session_id, field)
 
     if any(word in cmd for word in ["start over", "restart", "reset"]):
@@ -286,15 +269,11 @@ def handle_command(command_input: CommandInput):
             }
         # Check for new preferences in feedback
         logger.info(f"Checking for new preferences in feedback: {cmd}")
-        # Use the target preference from session
-        target_preference = session.get("current_target_preference")
-        extracted = extract_user_preferences(cmd, OPENAI_API_KEY, target_preference)
+        extracted = extract_user_preferences(cmd, OPENAI_API_KEY)
         if any(extracted.get(k) for k in PREFERENCE_FIELDS):
             for key in PREFERENCE_FIELDS:
                 if extracted.get(key):
                     memory.update_session(session_id, key, extracted[key])
-            # Clear target preference after successful update
-            memory.update_session(session_id, "current_target_preference", None)
             song = get_valid_recommendation(session)
             return handle_song_recommendation(session_id, song)
         return {"response": "<span style='color:green'>You can say 'another one', 'change genre', 'change artist', 'change mood', 'change tempo', or 'reset' to start over.</span>"}

@@ -7,7 +7,6 @@ from typing import Dict, Optional
 
 from prompts import (
     PREFERENCE_EXTRACTION_PROMPT,
-    FOCUSED_PREFERENCE_EXTRACTION_PROMPT,
     SYSTEM_ROLES,
     GPT_SETTINGS
 )
@@ -21,14 +20,13 @@ from constants import (
 )
 from utils import fuzzy_match_word
 
-def extract_preferences_raw(message: str, api_key: str, target_preference: Optional[str] = None) -> dict:
+def extract_preferences_raw(message: str, api_key: str) -> dict:
     """
     Make raw GPT call to extract preferences from message.
     
     Args:
         message: User input message
         api_key: OpenAI API key
-        target_preference: Specific preference being asked about (genre/mood/tempo/artist_or_song)
     
     Returns:
         Raw dictionary of extracted preferences
@@ -40,15 +38,7 @@ def extract_preferences_raw(message: str, api_key: str, target_preference: Optio
 
     # Format prompt with available moods
     mood_list_str = ", ".join(f'"{m}"' for m in sorted(MOODS))
-    
-    # Use focused prompt if targeting specific preference
-    if target_preference:
-        formatted_prompt = FOCUSED_PREFERENCE_EXTRACTION_PROMPT.format(
-            available_moods=mood_list_str,
-            target_preference=target_preference
-        )
-    else:
-        formatted_prompt = PREFERENCE_EXTRACTION_PROMPT.format(available_moods=mood_list_str)
+    formatted_prompt = PREFERENCE_EXTRACTION_PROMPT.format(available_moods=mood_list_str)
 
     body = {
         "model": OPENAI_MODEL,
@@ -99,32 +89,9 @@ def extract_preferences_raw(message: str, api_key: str, target_preference: Optio
             "_error": str(e)
         }
 
-def extract_user_preferences(
-    message: str, 
-    api_key: str,
-    target_preference: Optional[str] = None
-) -> Dict[str, Optional[str]]:
-    """
-    Extract preferences from a single message.
-    
-    Args:
-        message: User input message
-        api_key: OpenAI API key
-        target_preference: Specific preference being asked about
-    
-    Returns:
-        Dictionary of processed and validated preferences
-    """
-    # First extract raw preferences from the message
-    raw_preferences = extract_preferences_raw(message, api_key, target_preference)
-    # Then process them with the original message context and target preference
-    return process_preferences(raw_preferences, message, target_preference)
-
-
 def process_preferences(
     extracted: dict,
-    message: Optional[str] = None,
-    target_preference: Optional[str] = None
+    message: Optional[str] = None
 ) -> Dict[str, Optional[str]]:
     """
     Process and validate extracted preferences.
@@ -132,7 +99,6 @@ def process_preferences(
     Args:
         extracted: Raw extracted preferences
         message: Original message for additional context
-        target_preference: Specific preference being asked about
     
     Returns:
         Processed and validated preferences
