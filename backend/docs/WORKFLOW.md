@@ -3,126 +3,180 @@
 ## Message Processing Flow
 
 ```mermaid
-sequenceDiagram
-    participant Client
-    participant FastAPI (main.py)
-    participant PreferenceHandler (preferences.py)
-    participant Extraction (extraction.py)
-    participant GPT
-    participant Memory (memory.py)
+graph TB
+    Client[Client Request] -->|POST /recommend| FastAPI[FastAPI main.py]
+    
+    subgraph MainHandler[Main Handler - main.py]
+        FastAPI -->|Log: session state| SessionHandler[Session Handler]
+        SessionHandler -->|Get State| Memory[(Memory Store)]
+        Memory -->|Return State| SessionHandler
+    end
+    
+    subgraph PreferenceProcessing[Preference Processing - preferences.py, extraction.py]
+        SessionHandler -->|Extract| PreferenceHandler[Preference Handler]
+        PreferenceHandler -->|Log: raw message| GPTExtraction[GPT Extraction]
+        GPTExtraction -->|Log: extracted prefs| Validation[Preference Validation]
+        Validation -->|Log: normalized prefs| Memory
+    end
 
-    Client->>FastAPI (main.py): POST /recommend
-    FastAPI (main.py)->>PreferenceHandler (preferences.py): extract_user_preferences(message)
-    PreferenceHandler (preferences.py)->>Extraction (extraction.py): extract_preferences_raw(message)
-    Extraction (extraction.py)->>GPT: Call GPT with preference extraction prompt
-    GPT-->>Extraction (extraction.py): Raw preferences
-    Extraction (extraction.py)->>Extraction (extraction.py): process_preferences(raw)
-    Extraction (extraction.py)-->>PreferenceHandler (preferences.py): Processed preferences
-    PreferenceHandler (preferences.py)->>Memory (memory.py): Update session
-    Memory (memory.py)-->>FastAPI (main.py): Updated session
-    FastAPI (main.py)-->>Client: Response
+    subgraph FilterPipeline[Filter Pipeline - filters.py]
+        FilterInit[Initialize Filters] -->|Log: initial count| ArtistFilter
+        
+        subgraph Filters[Filter Chain]
+            ArtistFilter[Artist Filter] -->|Log: artist matches| GenreFilter[Genre Filter]
+            GenreFilter -->|Log: genre matches| TempoFilter[Tempo Filter]
+            TempoFilter -->|Log: tempo matches| MoodFilter[Mood Filter]
+            MoodFilter -->|Log: mood scores| HistoryFilter[History Filter]
+        end
+        
+        HistoryFilter -->|Log: final count| ScoreCalc[Score Calculator]
+    end
+    
+    subgraph Recommendation[Recommendation Engine - recommender_eng.py]
+        ScoreCalc -->|Log: top scores| Selection[Song Selection]
+        Selection -->|Log: selected song| SpotifyURL[Spotify URL Check]
+        SpotifyURL -->|Log: URL status| ResponseFormat[Format Response]
+    end
+    
+    subgraph MemoryOps[Memory Operations - memory.py]
+        ResponseFormat -->|Log: final song| UpdateHistory[Update History]
+        UpdateHistory -->|Store| Memory
+        Memory -->|Log: session updated| Client
+    end
+
+    %% Error Handling Paths
+    GPTExtraction -->|Log: GPT error| Fallback[Fallback Handler]
+    FilterInit -->|Log: no matches| RelaxedFilters[Relaxed Filters]
+    RelaxedFilters -->|Log: still no matches| Fallback
+    Fallback -->|Log: using fallback| ResponseFormat
+
+    style FilterPipeline fill:#f9f,stroke:#333,stroke-width:2px
+    style PreferenceProcessing fill:#bbf,stroke:#333,stroke-width:2px
+    style MemoryOps fill:#bfb,stroke:#333,stroke-width:2px
 ```
 
 ## Component Responsibilities
 
-### main.py
-- Handles HTTP endpoints
-- Manages session state
-- Routes user messages to appropriate handlers
-- Coordinates the recommendation flow
+### main.py (Main Handler)
+- Handles HTTP endpoints and session state
+- Routes messages to appropriate handlers
+- Manages request/response lifecycle
+- Coordinates between components
+- Implements global error handling
+- Handles user commands and feedback
 
-### preferences.py
-- Manages preference extraction workflow
-- Updates session with new preferences
-- Tracks preference state (set/not set)
-- Determines when all preferences are collected
+### preferences.py & extraction.py (Preference Processing)
+- **preferences.py**:
+  - Manages preference validation and normalization
+  - Updates session with new preferences
+  - Tracks preference completion state
+  - Handles "no preference" cases
+- **extraction.py**:
+  - Communicates with GPT API
+  - Extracts structured preferences from raw text
+  - Handles preference validation rules
+  - Manages GPT error recovery
 
-### extraction.py
-- Handles raw GPT API communication for preference extraction
-- Processes and validates extracted preferences
-- Manages preference normalization and validation
-- Handles special cases (no preference, not music, etc.)
+### recommender_eng.py (Recommendation Engine)
+- Orchestrates the recommendation process
+- Coordinates between filters and scoring
+- Manages mood vector generation
+- Handles fallback recommendations
+- Formats final song responses
+- Manages Spotify URL validation
 
-### utils.py
-- Provides utility functions for chatting and recommendations
-- Handles chat response generation
-- Manages mood vectors and tempo conversions
-- Provides fuzzy matching utilities
+### filters.py (Filter Pipeline)
+- Implements the filter chain:
+  - Artist/song matching with fuzzy search
+  - Genre filtering with exact matches
+  - Tempo filtering with BPM ranges
+  - Mood-based filtering with similarity
+  - History exclusion
+- Manages filter relaxation
+- Provides filter statistics and logging
 
-### prompts.py
-- Centralizes all GPT prompts
-- Defines system roles for different GPT contexts
-- Configures GPT settings for each prompt type
-- Maintains prompt templates
+### scoring.py (Score Calculator)
+- Calculates weighted song scores based on:
+  - Genre match weight
+  - Mood similarity score
+  - Tempo category match
+  - Artist/song relevance
+  - Popularity factor
+- Provides score breakdowns for logging
 
-### constants.py
-- Defines all constant values
-- Maintains lists of valid moods and genres
-- Stores mood vectors and API settings
-- Defines UI elements and feedback types
+### memory.py (Memory Operations)
+- Manages thread-safe session storage
+- Handles session state operations:
+  - Preference updates
+  - History tracking
+  - Session resets
+  - State persistence
+- Prevents song repetition
+- Manages concurrent access
 
-### memory.py
-- Manages session storage
-- Handles preference persistence
-- Tracks conversation state
+## Data Flow Process
 
-## Preference Processing Flow
+1. **Request Reception** (main.py)
+   - User message received at `/recommend`
+   - Session state loaded
+   - Request validation
 
-1. **Input Reception**
-   - User sends message to `/recommend` endpoint
-   - Message can be explicit preference or conversation
+2. **Preference Processing** (preferences.py, extraction.py)
+   - Raw message sent to GPT
+   - Structured preferences extracted
+   - Preferences normalized and validated
+   - Session state updated
 
-2. **Preference Extraction**
-   ```python
-   # main.py
-   user_message = preference.artist_or_song or preference.genre or preference.mood or preference.tempo or ""
-   extract_user_preferences(message, OPENAI_API_KEY)
-   ```
+3. **Filter Application** (filters.py)
+   - Artist/song filtering
+   - Genre and tempo filtering
+   - Mood-based similarity
+   - History exclusion
+   - Filter relaxation if needed
 
-3. **GPT Processing**
-   - Raw message sent to GPT for initial extraction
-   - GPT returns structured preference data
-   - Response is processed and validated
-   - Special cases are handled (no preference, not music)
+4. **Song Selection** (recommender_eng.py, scoring.py)
+   - Score calculation
+   - Song ranking
+   - Selection validation
+   - Spotify URL verification
+   - Response formatting
 
-4. **Session Update**
-   - New preferences are merged with existing session
-   - Missing preferences are tracked
-   - "No preference" states are recorded
+5. **State Update** (memory.py)
+   - History tracking
+   - Preference persistence
+   - Session management
+   - Response delivery
 
-5. **Recommendation Flow**
-   - Once all preferences are set, recommendation engine is triggered
-   - Recommendations are filtered based on preferences
-   - Response is formatted and sent back to user
+## Key Features
 
-## Key Concepts
+### Session State
+```python
+{
+    "genre": str | None,
+    "mood": str | None,
+    "tempo": str | None,
+    "artist_or_song": str | None,
+    "awaiting_feedback": bool,
+    "history": List[Tuple[str, str]]
+}
+```
 
-### Preference Fields
-- genre
-- mood
-- tempo
-- artist_or_song
-
-### Session States
-- Awaiting feedback
-- Has all preferences
-- Missing preferences
-- No preference markers
+### Command Types
+- Change preferences
+- Reset session
+- Request new song
+- Provide feedback
 
 ### Error Handling
-- Invalid preferences
-- GPT API failures
-- Missing session data
-- Malformed responses
+- Global exception handling
+- GPT fallback strategies
+- Filter relaxation
+- Input validation
+- Session recovery
 
-### Prompt Management
-- System roles for different contexts
-- Customizable prompt templates
-- GPT parameter configurations
-- Fallback responses
-
-### Data Validation
-- Mood validation against known set
-- Genre validation against known set
-- Tempo category normalization
-- Fuzzy matching for inexact inputs
+### Performance Features
+- Precomputed recommendation maps
+- Efficient filter chain
+- Thread-safe operations
+- History deduplication
+- Structured logging throughout pipeline

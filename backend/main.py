@@ -44,11 +44,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Configure logging with more detailed format
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s - %(extra)s'
 )
 logger = logging.getLogger(__name__)
+
+# Add null handler for extra context
+class ExtraFormatter(logging.Formatter):
+    def format(self, record):
+        if not hasattr(record, 'extra'):
+            record.extra = '{}'
+        return super().format(record)
+
+handler = logging.StreamHandler()
+handler.setFormatter(ExtraFormatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s - %(extra)s'))
+logger.addHandler(handler)
 
 class PreferenceInput(BaseModel):
     session_id: str
@@ -66,15 +78,36 @@ def get_valid_recommendation(session):
     """Get a valid song recommendation with Spotify URL."""
     attempts = 0
     max_attempts = 10
+    
+    logger.info("Starting recommendation search", extra={
+        "session_id": session.get("session_id"),
+        "preferences": {
+            "genre": session.get("genre"),
+            "mood": session.get("mood"),
+            "tempo": session.get("tempo"),
+            "artist_or_song": session.get("artist_or_song")
+        }
+    })
+    
     while attempts < max_attempts:
         song = recommend_engine(session, api_key=OPENAI_API_KEY)
         if not song or song.get('song') == "N/A":
-            logger.warning(f"Invalid song returned on attempt {attempts + 1}")
+            logger.warning("Invalid song returned", extra={
+                "attempt": attempts + 1,
+                "session_id": session.get("session_id"),
+                "song_status": "invalid"
+            })
             return None
             
         spotify_url = song.get("spotify_url")
         if spotify_url and "open.spotify.com/track/" in spotify_url:
-            logger.info(f"Found valid song with Spotify URL on attempt {attempts + 1}")
+            logger.info("Found valid song", extra={
+                "attempt": attempts + 1,
+                "session_id": session.get("session_id"),
+                "song": song.get("song"),
+                "artist": song.get("artist"),
+                "spotify_url": song.get("spotify_url")
+            })
             return song
             
         logger.debug(f"Song without Spotify URL on attempt {attempts + 1}")
@@ -85,6 +118,11 @@ def get_valid_recommendation(session):
     return None
 
 def handle_song_recommendation(session_id: str, song: dict) -> dict:
+    logger.info("Handling song recommendation", extra={
+        "session_id": session_id,
+        "song_data": song,
+        "recommendation_type": "spotify" if song and song.get("spotify_url") else "fallback"
+    })
     """
     Handle song recommendation response formatting.
     
@@ -134,6 +172,11 @@ def handle_preference_change(session_id: str, field: str) -> dict:
     }
 
 def handle_user_message(session_id: str, message: str) -> dict:
+    logger.info("Processing user message", extra={
+        "session_id": session_id,
+        "message_length": len(message),
+        "message_type": "preference_input"
+    })
     """
     Process user message and update preferences.
     
@@ -191,7 +234,16 @@ def build_conversation_context(session: dict) -> str:
 @app.post("/recommend")
 def recommend(preference: PreferenceInput):
     """Handle user's preference input and provide recommendations."""
-    logger.info(f"Received recommend request for session {preference.session_id}")
+    logger.info("Received recommendation request", extra={
+        "session_id": preference.session_id,
+        "input_preferences": {
+            "genre": preference.genre,
+            "mood": preference.mood,
+            "tempo": preference.tempo,
+            "artist_or_song": preference.artist_or_song
+        },
+        "endpoint": "/recommend"
+    })
     # Block multiple recommends if waiting for feedback
     session = memory.get_session(preference.session_id)
     if session.get("awaiting_feedback", False):
@@ -215,7 +267,17 @@ def handle_command(command_input: CommandInput):
     session_id = command_input.session_id
     session = memory.get_session(session_id)
     
-    logger.info(f"Processing command: {cmd}")
+    logger.info("Processing command", extra={
+        "session_id": session_id,
+        "command": cmd,
+        "awaiting_feedback": session.get("awaiting_feedback", False),
+        "current_preferences": {
+            "genre": session.get("genre"),
+            "mood": session.get("mood"),
+            "tempo": session.get("tempo"),
+            "artist_or_song": session.get("artist_or_song")
+        }
+    })
 
     # Preference change commands
     for pref in ["genre", "mood", "tempo", "artist"]:

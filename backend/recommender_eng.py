@@ -18,8 +18,16 @@ from scoring import calculate_weighted_score
 from filters import apply_all_filters
 from constants import PREFERENCE_FIELDS
 
-# Configure logging
+# Configure logging with structured format
 logger = logging.getLogger(__name__)
+
+def log_dict_info(message: str, **kwargs):
+    """Helper function for structured logging."""
+    logger.info(message, extra={"data": str(kwargs)})
+
+def log_dict_warning(message: str, **kwargs):
+    """Helper function for structured warning logging."""
+    logger.warning(message, extra={"data": str(kwargs)})
 
 def load_and_process_data() -> tuple[pd.DataFrame, dict]:
     """
@@ -28,29 +36,42 @@ def load_and_process_data() -> tuple[pd.DataFrame, dict]:
     Returns:
         Tuple of (processed DataFrame, recommendation map)
     """
-    logger.info(f"Loading data from {DATA_PATH}")
+    log_dict_info("Loading song dataset", path=DATA_PATH)
     df = pd.read_csv(DATA_PATH)
 
     # Convert tempo to numeric and handle missing values
-    logger.info("Processing tempo data")
+    log_dict_info("Processing tempo data", total_rows=len(df))
     df["tempo_raw"] = pd.to_numeric(df["tempo"], errors="coerce")
 
     # Preprocess audio features
-    logger.info("Processing audio features")
+    log_dict_info("Processing audio features", 
+                 features=AUDIO_FEATURES,
+                 initial_rows=len(df))
     df = df.dropna(subset=AUDIO_FEATURES)
     df[AUDIO_FEATURES] = df[AUDIO_FEATURES].apply(pd.to_numeric, errors='coerce')
     df = df.dropna(subset=AUDIO_FEATURES)
 
     # Scale audio features
-    logger.info("Scaling audio features")
+    log_dict_info("Scaling audio features", 
+                 features=AUDIO_FEATURES,
+                 scaler="MinMaxScaler")
     scaler = MinMaxScaler()
     df[AUDIO_FEATURES] = scaler.fit_transform(df[AUDIO_FEATURES])
 
     # Precompute recommendation map
-    logger.info("Building recommendation map")
+    log_dict_info("Building recommendation map", 
+                 total_songs=len(df),
+                 unique_genres=len(df['playlist_genre'].unique()))
     recommendation_map = precompute_recommendation_map(df)
     
-    logger.info("Data preprocessing complete")
+    log_dict_info("Data preprocessing complete",
+                 final_rows=len(df),
+                 feature_stats={
+                     feature: {
+                         "mean": float(df[feature].mean()),
+                         "std": float(df[feature].std())
+                     } for feature in AUDIO_FEATURES
+                 })
     return df, recommendation_map
 
 # Load processed data
@@ -74,13 +95,17 @@ def recommend_engine(preferences: dict, api_key: str):
             preferences[field] is None and 
             not preferences.get(f"no_pref_{field}", False)
         ):
-            logger.warning(f"Missing required preference: {field}")
+            log_dict_warning("Missing required preference", 
+                           field=field,
+                           preferences=preferences)
             return None
             
     # Get mood vector if mood preference exists
     mood_vec = None
     if preferences.get("mood"):
-        logger.info(f"Getting mood vector for mood: {preferences['mood']}")
+        log_dict_info("Getting mood vector", 
+                     mood=preferences['mood'],
+                     session_id=preferences.get('session_id'))
         mood_vec = get_mood_vector(preferences["mood"], api_key)
         
     # Apply filters with increasing flexibility
@@ -90,7 +115,10 @@ def recommend_engine(preferences: dict, api_key: str):
     )
     
     if filtered.empty:
-        logger.info("No matches with strict filters, trying relaxed filters")
+        log_dict_info("No strict matches, relaxing filters",
+                     preferences=preferences,
+                     history_length=len(history),
+                     mood_vector_present=mood_vec is not None)
         filtered, exclude_artist = apply_all_filters(
             df, preferences, AUDIO_FEATURES, mood_vec, strict=False
         )
@@ -110,22 +138,37 @@ def recommend_engine(preferences: dict, api_key: str):
             if (row["track_name"], row["track_artist"]) not in history:
                 top = row
                 history.append((row["track_name"], row["track_artist"]))
-                logger.info(f"Found non-repeated song: {row['track_name']}")
+                log_dict_info("Found non-repeated song", 
+                            song=row['track_name'],
+                            artist=row['track_artist'],
+                            score=row['weighted_score'])
                 break
                 
         # If all are repeats, take the top one
         if top is None and not filtered.empty:
             top = filtered.iloc[0]
             history.append((top["track_name"], top["track_artist"]))
-            logger.info("Using repeated song (all songs were repeats)")
+            log_dict_info("Using repeated song",
+                       song=top['track_name'],
+                       artist=top['track_artist'],
+                       weighted_score=float(top['weighted_score']),
+                       reason="all_songs_repeated")
     
     # Use fallback recommendation if no matches found
     if top is None:
-        logger.info("Using fallback recommendation")
         genre = preferences.get("genre", "rock")
         tempo = preferences.get("tempo", "medium")
         mood = preferences.get("mood", "calm")
         energy = "energetic"
+        
+        log_dict_info("Using fallback recommendation",
+                    fallback_preferences={
+                        "genre": genre,
+                        "tempo": tempo,
+                        "mood": mood,
+                        "energy": energy
+                    },
+                    history_length=len(history))
         
         key = build_recommendation_key(genre, mood, energy, tempo)
         fallback_list = recommendation_map.get(key, [])
@@ -138,13 +181,24 @@ def recommend_engine(preferences: dict, api_key: str):
         if non_repeats:
             top = random.choice(non_repeats)
             history.append((top["track_name"], top["track_artist"]))
-            logger.info("Found non-repeated fallback song")
+            log_dict_info("Found non-repeated fallback song",
+                       song=top["track_name"],
+                       artist=top["track_artist"],
+                       fallback_key=key,
+                       available_songs=len(non_repeats))
         elif fallback_list:
             top = random.choice(fallback_list)
             history.append((top["track_name"], top["track_artist"]))
-            logger.info("Using repeated fallback song")
+            log_dict_info("Using repeated fallback song",
+                       song=top["track_name"],
+                       artist=top["track_artist"],
+                       fallback_key=key,
+                       history_length=len(history))
         else:
-            logger.warning("No recommendations found")
+            log_dict_warning("No recommendations found",
+                          preferences=preferences,
+                          fallback_key=key,
+                          history_length=len(history))
             return None
 
     # Update history and prepare response
@@ -162,7 +216,10 @@ def recommend_engine(preferences: dict, api_key: str):
         track_id.isalnum()
     ):
         spotify_url = f"https://open.spotify.com/track/{track_id}"
-        logger.info(f"Found valid Spotify URL for track ID: {track_id}")
+        log_dict_info("Generated Spotify URL",
+                    track_id=track_id,
+                    spotify_url=spotify_url,
+                    song=top.get("track_name"))
 
     # Build response
     response = {
@@ -180,7 +237,16 @@ def recommend_engine(preferences: dict, api_key: str):
         if top.get("track_artist", "").lower() != requested:
             response["artist_not_found"] = True
             response["requested_artist"] = requested
-            logger.info(f"Requested artist '{requested}' not found, suggesting alternative")
+            log_dict_info("Artist not found, suggesting alternative",
+                       requested_artist=requested,
+                       suggested_artist=top.get("track_artist"),
+                       song=top.get("track_name"))
 
-    logger.info(f"Recommending: {response['song']} by {response['artist']} ({response['genre']}, {response['mood']}, {response['tempo']})")
+    log_dict_info("Final recommendation",
+                song=response['song'],
+                artist=response['artist'],
+                genre=response['genre'],
+                mood=response['mood'],
+                tempo=response['tempo'],
+                has_spotify_url=bool(spotify_url))
     return response

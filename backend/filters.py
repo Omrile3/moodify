@@ -3,9 +3,21 @@
 from typing import Dict, List, Optional, Tuple, Any
 import numpy as np
 import pandas as pd
+import logging
 from sklearn.metrics.pairwise import cosine_similarity
 from utils import convert_tempo_to_bpm, fuzzy_match_artist_song
 from constants import SIMILARITY_KEYWORDS
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+def log_dict_info(message: str, **kwargs):
+    """Helper function for structured logging."""
+    logger.info(message, extra={"data": str(kwargs)})
+
+def log_dict_warning(message: str, **kwargs):
+    """Helper function for structured warning logging."""
+    logger.warning(message, extra={"data": str(kwargs)})
 
 def apply_mood_filter(df: pd.DataFrame, mood_vec: Optional[np.ndarray], features: List[str]) -> pd.DataFrame:
     """
@@ -20,6 +32,7 @@ def apply_mood_filter(df: pd.DataFrame, mood_vec: Optional[np.ndarray], features
         DataFrame sorted by mood similarity
     """
     if mood_vec is None or df.empty:
+        log_dict_info("Skipping mood filter", reason="no_mood_vector" if mood_vec is None else "empty_dataframe")
         return df
         
     similarities = cosine_similarity(
@@ -43,8 +56,15 @@ def apply_genre_filter(df: pd.DataFrame, genre: Optional[str]) -> pd.DataFrame:
         Filtered DataFrame
     """
     if not genre or df.empty:
+        log_dict_info("Skipping genre filter", reason="no_genre" if not genre else "empty_dataframe")
         return df
-    return df[df['playlist_genre'].str.lower() == genre.lower()]
+        
+    filtered = df[df['playlist_genre'].str.lower() == genre.lower()]
+    log_dict_info("Applied genre filter", 
+                genre=genre,
+                initial_count=len(df),
+                filtered_count=len(filtered))
+    return filtered
 
 def apply_tempo_filter(df: pd.DataFrame, tempo: Optional[str]) -> pd.DataFrame:
     """
@@ -58,13 +78,21 @@ def apply_tempo_filter(df: pd.DataFrame, tempo: Optional[str]) -> pd.DataFrame:
         Filtered DataFrame
     """
     if not tempo or df.empty:
+        log_dict_info("Skipping tempo filter", reason="no_tempo" if not tempo else "empty_dataframe")
         return df
         
     bpm_range = convert_tempo_to_bpm(tempo)
-    return df[
+    filtered = df[
         (df['tempo_raw'] >= bpm_range[0]) & 
         (df['tempo_raw'] <= bpm_range[1])
     ]
+    
+    log_dict_info("Applied tempo filter",
+                tempo=tempo,
+                bpm_range=bpm_range,
+                initial_count=len(df),
+                filtered_count=len(filtered))
+    return filtered
 
 def apply_artist_filter(
     df: pd.DataFrame, 
@@ -80,7 +108,11 @@ def apply_artist_filter(
     Returns:
         Tuple of (filtered DataFrame, excluded artist)
     """
+    log_dict_info("Starting artist/song filter", 
+                artist_or_song=artist_or_song,
+                initial_count=len(df))
     if not artist_or_song:
+        log_dict_info("Skipping artist/song filter", reason="no_artist_or_song")
         return df, None
         
     # Check for similarity request
@@ -88,9 +120,11 @@ def apply_artist_filter(
     lowered = artist_or_song.lower()
     
     if any(kw in lowered for kw in SIMILARITY_KEYWORDS):
+        log_dict_info("Detected similarity request", request=lowered)
         for artist in df['track_artist'].dropna().unique():
             if artist.lower() in lowered:
                 exclude_artist = artist
+                log_dict_info("Found artist to exclude", artist=exclude_artist)
                 break
                 
     # Apply fuzzy matching
@@ -102,6 +136,10 @@ def apply_artist_filter(
             filtered_df["track_artist"].str.lower() != exclude_artist.lower()
         ]
         
+    log_dict_info("Applied artist/song filter",
+                filtered_count=len(filtered_df),
+                excluded_artist=exclude_artist,
+                similarity_requested=bool(exclude_artist))
     return filtered_df, exclude_artist
 
 def exclude_history(
@@ -119,14 +157,22 @@ def exclude_history(
         Filtered DataFrame
     """
     if not history or df.empty:
+        log_dict_info("Skipping history exclusion", 
+                    reason="no_history" if not history else "empty_dataframe")
         return df
-        
-    return df[
+    
+    filtered = df[
         ~df.apply(
             lambda row: (row["track_name"], row["track_artist"]) in history, 
             axis=1
         )
     ]
+    
+    log_dict_info("Applied history exclusion",
+                initial_count=len(df),
+                filtered_count=len(filtered),
+                history_size=len(history))
+    return filtered
 
 def apply_all_filters(
     df: pd.DataFrame,
@@ -148,6 +194,12 @@ def apply_all_filters(
     Returns:
         Tuple of (filtered DataFrame, excluded artist)
     """
+    log_dict_info("Starting filter pipeline",
+                initial_songs=len(df),
+                preferences={k: v for k, v in preferences.items() if k != "history"},
+                strict_mode=strict,
+                has_mood_vector=mood_vector is not None)
+                
     filtered = df.copy()
     exclude_artist = None
     
@@ -172,4 +224,15 @@ def apply_all_filters(
     # Always exclude history
     filtered = exclude_history(filtered, preferences.get("history", []))
     
+    log_dict_info("Filter pipeline complete",
+                initial_count=len(df),
+                final_count=len(filtered),
+                excluded_artist=exclude_artist,
+                filters_applied={
+                    "artist": bool(preferences.get("artist_or_song")),
+                    "genre": bool(preferences.get("genre")) and strict,
+                    "tempo": bool(preferences.get("tempo")) and strict,
+                    "mood": mood_vector is not None,
+                    "history": bool(preferences.get("history"))
+                })
     return filtered, exclude_artist
