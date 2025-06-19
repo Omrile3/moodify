@@ -115,11 +115,11 @@ def process_preferences(
             **{k: v for k, v in extracted.items() if k.startswith("_")}
         }
 
-    # Check for "no preference" in original message
+    # Check for "no preference" in original message using fuzzy matching
     has_no_pref = False
     if message:
         msg_lower = message.lower()
-        has_no_pref = any(word in msg_lower for word in NO_PREF_WORDS)
+        has_no_pref = fuzzy_match_word(msg_lower, NO_PREF_WORDS) is not None
 
     # Process each preference field
     for field in ["genre", "mood", "tempo", "artist_or_song"]:

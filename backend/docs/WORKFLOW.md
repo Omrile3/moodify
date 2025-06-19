@@ -88,11 +88,12 @@ graph TB
   - Manages preference validation and normalization
   - Updates session with new preferences
   - Tracks preference completion state
-  - Handles "no preference" cases
+  - Handles "no preference" cases with session state tracking
 - **extraction.py**:
   - Communicates with GPT API
   - Extracts structured preferences from raw text
   - Handles preference validation rules
+  - Uses fuzzy matching for "no preference" detection
   - Manages GPT error recovery
 
 ### recommender_eng.py (Recommendation Engine)
@@ -202,6 +203,10 @@ class Messages:
     "mood": str | None,
     "tempo": str | None,
     "artist_or_song": str | None,
+    "no_pref_genre": bool,             # Tracks explicit "no preference" states
+    "no_pref_mood": bool,
+    "no_pref_tempo": bool,
+    "no_pref_artist_or_song": bool,
     "awaiting_feedback": bool,
     "history": List[Tuple[str, str]],
     "greeted": bool                     # Tracks if initial greeting was shown
