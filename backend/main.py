@@ -224,7 +224,7 @@ def recommend(preference: PreferenceInput):
         },
         endpoint="/recommend")
     session = memory.get_session(preference.session_id)
-    user_message = preference.message.strip()
+    user_message = preference.message.strip() if preference.message else None
 
     # Only show initial greeting if no message and no preferences
     if not user_message and not any([session.get(field) for field in PREFERENCE_FIELDS]) and not session.get("greeted"):
