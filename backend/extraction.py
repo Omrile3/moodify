@@ -4,6 +4,7 @@ import json
 import re
 import requests
 from typing import Dict, Optional
+from log_utils import log_error
 
 from prompts import (
     PREFERENCE_EXTRACTION_PROMPT,
@@ -80,7 +81,7 @@ def extract_preferences_raw(message: str, api_key: str) -> dict:
         return json.loads(match.group(0))
 
     except Exception as e:
-        print(f"Preference extraction failed: {e}")
+        log_error(f"Error extracting preferences: {e}")
         return {
             "genre": None,
             "mood": None,

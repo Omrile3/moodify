@@ -106,19 +106,6 @@ API_SETTINGS = {
     'OPENAI_API_URL': 'https://api.openai.com/v1/chat/completions'
 }
 
-# UI related constants
-BUTTONS_HTML = """
-<br>
-<div style='margin-top:10px;display:flex;gap:8px;flex-wrap:wrap'>
-    <button onclick="window.handleBotReply('yes')">👍 Yes, I love it!</button>
-    <button onclick="window.handleBotReply('no')">🔄 Recommend another</button>
-    <button onclick="window.handleBotReply('change mood')">Change mood</button>
-    <button onclick="window.handleBotReply('change genre')">Change genre</button>
-    <button onclick="window.handleBotReply('change artist')">Change artist</button>
-    <button onclick="window.handleBotReply('change tempo')">Change tempo</button>
-</div>
-"""
-
 # Command types for user feedback
 POSITIVE_FEEDBACK = {"yes", "love", "liked", "good", "great", "perfect", "awesome", "sure"}
 NEGATIVE_FEEDBACK = {"no", "didn't", "not really", "did not", "nah", "not a good fit", "not fit", "try again"}
