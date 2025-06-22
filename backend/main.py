@@ -22,12 +22,7 @@ from utils import (
     next_ai_message
 )
 from constants import (
-    BUTTONS_HTML,
-    POSITIVE_FEEDBACK,
-    NEGATIVE_FEEDBACK,
-    CHANGE_COMMANDS,
     PREFERENCE_FIELDS,
-    OPENAI_MODEL
 )
 from messages import Messages
 
