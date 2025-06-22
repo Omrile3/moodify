@@ -30,6 +30,14 @@ from constants import (
     OPENAI_MODEL
 )
 from messages import Messages
+from messages.Messages.Recommendations import (
+    LOVE_SONG_COMMAND,
+    RECOMMAND_ANOTHER_COMMAND,
+    CHANGE_MOOD_COMMAND,
+    CHANGE_GENRE_COMMAND,
+    CHANGE_ARTIST_COMMAND,
+    CHANGE_TEMPO_COMMAND
+    )
 
 # Load OpenAI key
 load_dotenv()
@@ -53,6 +61,7 @@ logger = logging.getLogger(__name__)
 
 class PreferenceInput(BaseModel):
     session_id: str
+    message: Optional[str] = None
     genre: Optional[str] = None
     mood: Optional[str] = None
     tempo: Optional[str] = None
@@ -131,7 +140,7 @@ def handle_song_recommendation(session_id: str, song: dict) -> dict:
     memory.update_session(session_id, "awaiting_feedback", True)
     
     return {
-        "response": f"{Messages.wrap_green(gpt_message)}<br>{Messages.Recommendations.FEEDBACK_BUTTONS}{BUTTONS_HTML}"
+        "response": f"{Messages.wrap_green(gpt_message)}<br>{Messages.Recommendations.FEEDBACK_BUTTONS}"
     }
 
 
@@ -183,6 +192,7 @@ def handle_user_message(session_id: str, message: str) -> dict:
     
     # If all preferences are set, return recommendation
     if has_all_preferences(session):
+        logger.info(f"All preferences set for session {session_id}, generating recommendation")
         song = get_valid_recommendation(session)
         memory.update_session(session_id, "followup_count", 0)
         return handle_song_recommendation(session_id, song)
@@ -227,18 +237,9 @@ def recommend(preference: PreferenceInput):
             "artist_or_song": preference.artist_or_song
         },
         endpoint="/recommend")
-
     session = memory.get_session(preference.session_id)
-    
-    # Get user message from any preference field
-    user_message = (
-        preference.artist_or_song
-        or preference.genre
-        or preference.mood
-        or preference.tempo
-        or ""
-    )
-    
+    user_message = preference.message.strip()
+
     # Only show initial greeting if no message and no preferences
     if not user_message and not any([session.get(field) for field in PREFERENCE_FIELDS]) and not session.get("greeted"):
         memory.update_session(preference.session_id, "greeted", True)
@@ -255,7 +256,15 @@ def recommend(preference: PreferenceInput):
 
 @app.post("/command")
 def handle_command(command_input: CommandInput):
-    """Handle user commands and feedback."""
+    """Handle user commands and feedback.
+    possible commands:
+    LOVE_SONG_COMMAND = "yes".lower()
+    RECOMMAND_ANOTHER_COMMAND = "no".lower()
+    CHANGE_MOOD_COMMAND = "change mood".lower()
+    CHANGE_GENRE_COMMAND = "change genre".lower()
+    CHANGE_ARTIST_COMMAND = "change artist".lower()
+    CHANGE_TEMPO_COMMAND = "change tempo".lower()  
+    """
     cmd = command_input.command.lower()
     session_id = command_input.session_id
     session = memory.get_session(session_id)
@@ -270,24 +279,30 @@ def handle_command(command_input: CommandInput):
             "tempo": session.get("tempo"),
             "artist_or_song": session.get("artist_or_song")
         })
-
+    CHANGE_COMMANDS = [CHANGE_MOOD_COMMAND, CHANGE_GENRE_COMMAND, CHANGE_ARTIST_COMMAND, CHANGE_TEMPO_COMMAND]
     # Preference change commands
-    for pref in ["genre", "mood", "tempo", "artist"]:
-        if f"change {pref}" in cmd or f"switch {pref}" in cmd or f"new {pref}" in cmd or (pref in cmd and "change" in cmd):
-            field = "artist_or_song" if pref == "artist" else pref
-            return handle_preference_change(session_id, field)
+    if cmd in CHANGE_COMMANDS:
+        pass
+        for pref in ["genre", "mood", "tempo", "artist"]:
+                if f"change {pref}" in cmd or f"switch {pref}" in cmd or f"new {pref}" in cmd or (pref in cmd and "change" in cmd):
+                    field = "artist_or_song" if pref == "artist" else pref
+                    return handle_preference_change(session_id, field)
 
-    if any(word in cmd for word in ["start over", "restart", "reset"]):
-        logger.info(f"Resetting session {session_id}")
-        memory.reset_session(session_id)
-        return {
-            "response": Messages.with_emoji(Messages.wrap_green(Messages.Reset.START_FRESH), "🔁")
-        }
+    if cmd == RECOMMAND_ANOTHER_COMMAND or cmd == LOVE_SONG_COMMAND:
+        pass
+        #Generate a new recommendation
+        
+        if any(word in cmd for word in ["start over", "restart", "reset"]):
+            logger.info(f"Resetting session {session_id}")
+            memory.reset_session(session_id)
+            return {
+                "response": Messages.with_emoji(Messages.wrap_green(Messages.Reset.START_FRESH), "🔁")
+            }
 
-    if any(word in cmd for word in ["another", "again", "next one"]):
-        session["history"] = [(session.get("last_song"), session.get("last_artist"))]
-        song = get_valid_recommendation(session)
-        return handle_song_recommendation(session_id, song)
+        if any(word in cmd for word in ["another", "again", "next one"]):
+            session["history"] = [(session.get("last_song"), session.get("last_artist"))]
+            song = get_valid_recommendation(session)
+            return handle_song_recommendation(session_id, song)
 
     # Handle feedback after recommendation
     if session.get("awaiting_feedback"):
