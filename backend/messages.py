@@ -18,22 +18,20 @@ class Messages:
         CHANGE_ARTIST_COMMAND = "change artist".lower()
         CHANGE_TEMPO_COMMAND = "change tempo".lower()
 
-        @staticmethod
-        def buttons_html():
-            return f"""
+        BUTTONS_HTML=f"""
             <br>
             <div style='margin-top:10px;display:flex;gap:8px;flex-wrap:wrap'>
-                <button onclick=\"window.handleBotReply('{Messages.Recommendations.LOVE_SONG_COMMAND}')\">👍 Yes, I love it!. Give me one more</button>
-                <button onclick=\"window.handleBotReply('{Messages.Recommendations.RECOMMAND_ANOTHER_COMMAND}')\">🔄 Recommend another</button>
-                <button onclick=\"window.handleBotReply('{Messages.Recommendations.CHANGE_MOOD_COMMAND}')\">Change mood</button>
-                <button onclick=\"window.handleBotReply('{Messages.Recommendations.CHANGE_GENRE_COMMAND}')\">Change genre</button>
-                <button onclick=\"window.handleBotReply('{Messages.Recommendations.CHANGE_ARTIST_COMMAND}')\">Change artist</button>
-                <button onclick=\"window.handleBotReply('{Messages.Recommendations.CHANGE_TEMPO_COMMAND}')\">Change tempo</button>
+                <button onclick=\"window.handleBotReply('{LOVE_SONG_COMMAND}')\">👍 Yes, I love it!. Give me one more</button>
+                <button onclick=\"window.handleBotReply('{RECOMMAND_ANOTHER_COMMAND}')\">🔄 Recommend another</button>
+                <button onclick=\"window.handleBotReply('{CHANGE_MOOD_COMMAND}')\">Change mood</button>
+                <button onclick=\"window.handleBotReply('{CHANGE_GENRE_COMMAND}')\">Change genre</button>
+                <button onclick=\"window.handleBotReply('{CHANGE_ARTIST_COMMAND}')\">Change artist</button>
+                <button onclick=\"window.handleBotReply('{CHANGE_TEMPO_COMMAND}')\">Change tempo</button>
             </div>
             """
 
         NO_SONG_FOUND = "I couldn't find a song with a Spotify link. Want to change your preferences?"
-        FEEDBACK_BUTTONS = f"Are you happy with this recommendation?{buttons_html()}"  # Use with buttons_html()
+        FEEDBACK_BUTTONS = f"Are you happy with this recommendation?{BUTTONS_HTML}"  # Use with buttons_html()
 
 
 
