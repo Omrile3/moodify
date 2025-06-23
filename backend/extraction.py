@@ -4,7 +4,7 @@ import json
 import re
 import requests
 from typing import Dict, Optional
-from log_utils import log_dict_error
+from log_utils import log_dict_error, log_dict_info
 
 from prompts import (
     PREFERENCE_EXTRACTION_PROMPT,
@@ -39,13 +39,19 @@ def extract_preferences_raw(message: str, api_key: str) -> dict:
 
     # Format prompt with available moods
     mood_list_str = ", ".join(f'"{m}"' for m in sorted(MOODS))
-    formatted_prompt = PREFERENCE_EXTRACTION_PROMPT.format(available_moods=mood_list_str)
+    genere_list_str = ", ".join(f'"{g}"' for g in sorted(GENRES))
+    tempo_list_str = '"slow", "medium", "fast"'
+
+    formatted_prompt = PREFERENCE_EXTRACTION_PROMPT.format(available_moods=mood_list_str, 
+                                                           available_genres=genere_list_str,
+                                                           available_tempo=tempo_list_str,
+                                                           user_message= message)
 
     body = {
         "model": OPENAI_MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_ROLES['preference_extraction']},
-            {"role": "user", "content": formatted_prompt + f'\nInput: "{message}"'}
+            {"role": "user", "content": formatted_prompt}
         ],
         "temperature": GPT_SETTINGS['preference_extraction']['temperature'],
         "max_tokens": GPT_SETTINGS['preference_extraction']['max_tokens']
@@ -59,9 +65,10 @@ def extract_preferences_raw(message: str, api_key: str) -> dict:
         )
         response.raise_for_status()
         text = response.json()["choices"][0]["message"]["content"].strip()
-
+        log_dict_info(f"GPT extract prefernce response: {text}")
         # Handle special responses
         if text in ["__NOT_ENGLISH__", "__NOT_MUSIC__"]:
+            log_dict_info(f"Special response detected: {text}")
             return {
                 "genre": None,
                 "mood": None,
@@ -76,6 +83,7 @@ def extract_preferences_raw(message: str, api_key: str) -> dict:
             text = text[text.find("{"):]
         match = re.search(r"\{[\s\S]*\}", text)
         if not match:
+            log_dict_error("No JSON object found in response")
             raise ValueError("No JSON object found in response")
         
         return json.loads(match.group(0))
@@ -108,6 +116,7 @@ def process_preferences(
     
     # Handle special cases
     if any(extracted.get(k) for k in ["_not_english", "_not_music", "_error"]):
+        log_dict_info("Special case detected in extracted preferences")
         return {
             "genre": None,
             "mood": None,

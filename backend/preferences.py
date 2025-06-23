@@ -3,6 +3,7 @@
 from typing import Dict, Optional, List, Tuple
 from constants import PREFERENCE_FIELDS
 from extraction import extract_preferences_raw, process_preferences
+from log_utils import log_dict_info
 
 def extract_user_preferences(message: str, api_key: str) -> Dict[str, Optional[str]]:
     """
@@ -16,9 +17,10 @@ def extract_user_preferences(message: str, api_key: str) -> Dict[str, Optional[s
         Dictionary with extracted preferences or None for unspecified preferences
     """
     # First extract raw preferences from the message
-    raw_preferences = extract_preferences_raw(message, api_key)
+    gpt_extracted_preferences = extract_preferences_raw(message, api_key)
+    log_dict_info("gpt extracted prefernce from message", gpt_extracted_preferences)
     # Then process them with the original message context for "no preference" detection
-    return process_preferences(raw_preferences, message)
+    return process_preferences(gpt_extracted_preferences, message)
 
 def update_session_preferences(session: dict, extracted: dict) -> None:
     """
