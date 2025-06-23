@@ -109,6 +109,7 @@ function appendUserMessage(msg, isButton) {
 }
 
 function appendBotMessage(msgOrObj) {
+  console.log("Appending bot message:", msgOrObj);
   const chatBox = document.getElementById("chat-box");
   let msg = msgOrObj;
   let spotifyUrl = null;
