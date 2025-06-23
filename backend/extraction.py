@@ -39,12 +39,12 @@ def extract_preferences_raw(message: str, api_key: str) -> dict:
 
     # Format prompt with available moods
     mood_list_str = ", ".join(f'"{m}"' for m in sorted(MOODS))
-    genere_list_str = ", ".join(f'"{g}"' for g in sorted(GENRES))
+    genre_list_str = ", ".join(f'"{g}"' for g in sorted(GENRES))
     tempo_list_str = '"slow", "medium", "fast"'
 
     formatted_prompt = PREFERENCE_EXTRACTION_PROMPT.format(available_moods=mood_list_str, 
-                                                           available_genres=genere_list_str,
-                                                           available_tempo=tempo_list_str,
+                                                           available_genres=genre_list_str,
+                                                           available_tempos=tempo_list_str,
                                                            user_message= message)
 
     body = {
