@@ -287,64 +287,6 @@ def handle_command(command_input: CommandInput):
     return {
         "response": response
     }
-        
-    # if any(word in cmd for word in ["start over", "restart", "reset"]):
-    #     logger.info(f"Resetting session {session_id}")
-    #     memory.reset_session(session_id)
-    #     return {
-    #         "response": Messages.with_emoji(Messages.wrap_green(Messages.Reset.START_FRESH), "🔁")
-    #     }
-
-    # if any(word in cmd for word in ["another", "again", "next one"]):
-    #     session["history"] = [(session.get("last_song"), session.get("last_artist"))]
-    #     song = get_valid_recommendation(session)
-    #     return handle_song_recommendation(session_id, song)
-
-    # # Handle feedback after recommendation
-    # if session.get("awaiting_feedback"):
-    #     last_song = session.get("last_song")
-    #     last_artist = session.get("last_artist")
-        
-    #     # Verify we have a valid last song before handling feedback
-    #     if not last_song or not last_artist:
-    #         memory.update_session(session_id, "awaiting_feedback", False)
-    #         return {
-    #             "response": Messages.wrap_green(Messages.Preferences.INVALID_LAST_SONG)
-    #         }
-        
-    #     if any(word in cmd for word in NEGATIVE_FEEDBACK):
-    #         logger.info(f"Negative feedback received for song: {last_song} by {last_artist}")
-    #         # Add last song to history if not already there
-    #         if (last_song, last_artist) not in session["history"]:
-    #             session["history"].append((last_song, last_artist))
-            
-    #         # Get new recommendation
-    #         song = get_valid_recommendation(session)
-    #         return handle_song_recommendation(session_id, song)
-            
-    #     if any(word in cmd for word in POSITIVE_FEEDBACK):
-    #         logger.info(f"Positive feedback received for song: {last_song} by {last_artist}")
-    #         memory.update_session(session_id, "awaiting_feedback", False)
-    #         return {
-    #             "response": Messages.with_emoji(Messages.wrap_green(Messages.Recommendations.POSITIVE_FEEDBACK), "😊")
-    #         }
-    #     # Check for new preferences in feedback
-    #     logger.info(f"Checking for new preferences in feedback: {cmd}")
-    #     extracted = extract_user_preferences(session, cmd, OPENAI_API_KEY)
-    #     if any(extracted.get(k) for k in PREFERENCE_FIELDS):
-    #         for key in PREFERENCE_FIELDS:
-    #             if extracted.get(key):
-    #                 memory.update_session(session_id, key, extracted[key])
-    #         song = get_valid_recommendation(session)
-    #         return handle_song_recommendation(session_id, song)
-    #     return {"response": Messages.wrap_green(Messages.Preferences.AVAILABLE_COMMANDS)}
-
-    # if "change" in cmd or "something else" in cmd or "different" in cmd:
-    #     return {
-    #         "response": Messages.wrap_green(Messages.Preferences.CHANGE_OPTIONS)
-    #     }
-    # return {"response": Messages.wrap_green(Messages.Preferences.AVAILABLE_COMMANDS)}
-
 @app.post("/reset")
 def reset_session(command_input: CommandInput):
     session_id = command_input.session_id
