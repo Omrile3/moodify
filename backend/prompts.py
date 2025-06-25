@@ -2,6 +2,9 @@
 
 PREFERENCE_EXTRACTION_PROMPT = """You are an AI that extracts ONLY music preferences from user input in English.
 
+Previous bot response: "{last_bot_response}"
+User input: "{user_message}"
+
 Your output must be a JSON object with exactly these 4 keys:
 {{
   "genre": <string>,

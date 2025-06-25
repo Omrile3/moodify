@@ -30,12 +30,13 @@ empty_dict = {
 }
 
 
-def extract_preferences_raw(message: str, api_key: str) -> dict:
+def extract_preferences_raw(message: str, last_bot_response: Optional[str], api_key: str) -> dict:
     """
     Make raw GPT call to extract preferences from message.
     
     Args:
         message: User input message
+        last_bot_response: Previous bot response for context
         api_key: OpenAI API key
     
     Returns:
@@ -54,7 +55,8 @@ def extract_preferences_raw(message: str, api_key: str) -> dict:
     formatted_prompt = PREFERENCE_EXTRACTION_PROMPT.format(available_moods=mood_list_str, 
                                                            available_genres=genre_list_str,
                                                            available_tempos=tempo_list_str,
-                                                           user_message= message)
+                                                           last_bot_response=last_bot_response or "No previous response",
+                                                           user_message=message)
 
     body = {
         "model": OPENAI_MODEL,

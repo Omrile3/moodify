@@ -117,18 +117,22 @@ def handle_song_recommendation(session_id: str, song: dict) -> dict:
     """
     if not song:
         logger.info(f"No song found for session {session_id}")
+        response = Messages.wrap_green(Messages.Recommendations.NO_SONG_FOUND)
+        memory.update_session(session_id, "last_bot_response", response)
         return {
-            "response": Messages.wrap_green(Messages.Recommendations.NO_SONG_FOUND)
+            "response": response
         }
     
     # Update session with new song
     logger.info(f"Recommending song: {song.get('song')} by {song.get('artist')}")
     memory.update_last_song(session_id, song['song'], song['artist'])
     gpt_message = generate_chat_response(song, memory.get_session(session_id), OPENAI_API_KEY)
+    response = f"{Messages.wrap_green(gpt_message)}<br>{Messages.Recommendations.FEEDBACK_BUTTONS}"
     memory.update_session(session_id, "awaiting_feedback", True)
+    memory.update_session(session_id, "last_bot_response", response)
     
     return {
-        "response": f"{Messages.wrap_green(gpt_message)}<br>{Messages.Recommendations.FEEDBACK_BUTTONS}"
+        "response": response
     }
 
 
@@ -148,8 +152,10 @@ def handle_preference_change(session_id: str, field: str) -> dict:
     memory.update_session(session_id, f"no_pref_{field}", False)
     memory.update_session(session_id, "awaiting_feedback", False)
     
+    response = Messages.wrap_green(Messages.Preferences.CHANGE_FIELD.format(field=field))
+    memory.update_session(session_id, "last_bot_response", response)
     return {
-        "response": Messages.wrap_green(Messages.Preferences.CHANGE_FIELD.format(field=field))
+        "response": response
     }
 
 def handle_user_message(session_id: str, message: str) -> dict:
@@ -169,15 +175,17 @@ def handle_user_message(session_id: str, message: str) -> dict:
     """
     session = memory.get_session(session_id)
     
-    # Extract preferences from message
-    extracted = extract_user_preferences(message, OPENAI_API_KEY)
+    # Extract preferences from message with session context
+    extracted = extract_user_preferences(session, message, OPENAI_API_KEY)
     logger.info(f"Extracted preferences: {extracted}")
     
     if all_extracted_are_none(extracted):
-        logger.info(f"No preferences extracted from message: {message}")
+        logger.info(f"could not extracted fields from message: {message}")
         ai_message = next_ai_message_not_extracted(session, message, OPENAI_API_KEY)
         memory.update_session(session_id, "followup_count", session.get("followup_count", 0) + 1)
-        return {"response": Messages.wrap_green(ai_message)}
+        response = Messages.wrap_green(ai_message)
+        memory.update_session(session_id, "last_bot_response", response)
+        return {"response": response}
 
     # Update session with new preferences
     update_session_preferences(session, extracted)
@@ -193,8 +201,10 @@ def handle_user_message(session_id: str, message: str) -> dict:
     # Otherwise, continue the conversation
     ai_message = next_ai_message(session, message, OPENAI_API_KEY)
     memory.update_session(session_id, "followup_count", session.get("followup_count", 0) + 1)
+    response = Messages.wrap_green(ai_message)
+    memory.update_session(session_id, "last_bot_response", response)
     
-    return {"response": Messages.wrap_green(ai_message)}
+    return {"response": response}
 
 # API Routes
 @app.post("/recommend")
@@ -216,8 +226,10 @@ def recommend(preference: PreferenceInput):
     if not user_message and not any([session.get(field) for field in PREFERENCE_FIELDS]) and not session.get("greeted"):
         memory.update_session(preference.session_id, "greeted", True)
         log_dict_info("New session, asking for initial preferences", session_id=preference.session_id)
+        response = Messages.wrap_green(Messages.Greeting.WELCOME)
+        memory.update_session(preference.session_id, "last_bot_response", response)
         return {
-            "response": Messages.wrap_green(Messages.Greeting.WELCOME)
+            "response": response
         }
 
     # Block multiple recommends if waiting for feedback
@@ -270,9 +282,11 @@ def handle_command(command_input: CommandInput):
     else:
         logger.info(f"Received unrecognized command: {cmd} for session {session_id}")
         # Handle unrecognized commands
-        return {
-            "response": Messages.wrap_green(Messages.Error.INVALID_COMMAND)
-        }
+    response = Messages.wrap_green(Messages.Error.INVALID_COMMAND)
+    memory.update_session(session_id, "last_bot_response", response)
+    return {
+        "response": response
+    }
         
     # if any(word in cmd for word in ["start over", "restart", "reset"]):
     #     logger.info(f"Resetting session {session_id}")
@@ -316,7 +330,7 @@ def handle_command(command_input: CommandInput):
     #         }
     #     # Check for new preferences in feedback
     #     logger.info(f"Checking for new preferences in feedback: {cmd}")
-    #     extracted = extract_user_preferences(cmd, OPENAI_API_KEY)
+    #     extracted = extract_user_preferences(session, cmd, OPENAI_API_KEY)
     #     if any(extracted.get(k) for k in PREFERENCE_FIELDS):
     #         for key in PREFERENCE_FIELDS:
     #             if extracted.get(key):
@@ -336,8 +350,10 @@ def reset_session(command_input: CommandInput):
     session_id = command_input.session_id
     memory.reset_session(session_id)
     memory.update_session(session_id, "greeted", False)  # Reset greeting flag
+    response = Messages.with_emoji(Messages.wrap_green(Messages.Reset.CONFIRM), "🔄")
+    memory.update_session(session_id, "last_bot_response", response)
     return {
-        "response": Messages.with_emoji(Messages.wrap_green(Messages.Reset.CONFIRM), "🔄")
+        "response": response
     }
 
 @app.get("/session/{session_id}")

@@ -5,19 +5,21 @@ from constants import PREFERENCE_FIELDS, NO_PREF
 from extraction import extract_preferences_raw, process_preferences
 from log_utils import log_dict_info
 
-def extract_user_preferences(message: str, api_key: str) -> Dict[str, Optional[str]]:
+def extract_user_preferences(session: dict, message: str, api_key: str) -> Dict[str, Optional[str]]:
     """
     Extract all preferences from a single message.
     
     Args:
+        session: Current session dictionary containing context
         message: User input message
-        api_key: OpenAI API key for preference extraction
+        api_key: OpenAI API key
     
     Returns:
         Dictionary with extracted preferences or None for unspecified preferences
     """
-    # First extract raw preferences from the message
-    gpt_extracted_preferences = extract_preferences_raw(message, api_key)
+    # First extract raw preferences from the message with context
+    last_bot_response = session.get("last_bot_response")
+    gpt_extracted_preferences = extract_preferences_raw(message, last_bot_response, api_key)
     log_dict_info("gpt extracted preference converted to json format", preferences=gpt_extracted_preferences)
     # Then process them with the original message context for "no preference" detection
     validated_preferences = process_preferences(gpt_extracted_preferences)
