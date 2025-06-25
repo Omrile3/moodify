@@ -184,31 +184,10 @@ def handle_user_message(session_id: str, message: str) -> dict:
         return handle_song_recommendation(session_id, song)
     
     # Otherwise, continue the conversation
-    context = build_conversation_context(session)
-    ai_message = next_ai_message(session, message + "\n\n" + context, OPENAI_API_KEY)
+    ai_message = next_ai_message(session, message, OPENAI_API_KEY)
     memory.update_session(session_id, "followup_count", session.get("followup_count", 0) + 1)
     
     return {"response": Messages.wrap_green(ai_message)}
-
-def build_conversation_context(session: dict) -> str:
-    """
-    Build context string for conversation.
-    
-    Args:
-        session: Current session dictionary
-    
-    Returns:
-        Formatted context string
-    """
-    known_prefs = {k: session.get(k) for k in PREFERENCE_FIELDS}
-    missing = get_missing_preferences(session)
-    no_prefs = [k for k in PREFERENCE_FIELDS if session.get(f"no_pref_{k}", False)]
-    
-    return (
-        f"Known preferences: {known_prefs}. "
-        f"Still missing: {missing}. "
-        f"User said no preference for: {no_prefs}."
-    )
 
 # API Routes
 @app.post("/recommend")

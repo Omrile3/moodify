@@ -104,7 +104,7 @@ def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
 
     all_keys = ["genre", "mood", "tempo", "artist_or_song"]
     known_prefs = {k: session.get(k) for k in all_keys if session.get(k) is not None}
-    missing = [k for k in all_keys if not (session.get(k) is not None or session.get(f"no_pref_{k}", False))]
+    missing = [k for k in all_keys if session.get(k) is None]
     no_prefs = [k for k in all_keys if session.get(f"no_pref_{k}", False)]
 
     format_vars = {

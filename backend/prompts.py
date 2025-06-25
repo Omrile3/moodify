@@ -41,18 +41,15 @@ If the user's message is off-topic or not in English, gently redirect them to mu
 
 NEXT_MESSAGE_USER_PROMPT = """Conversation state:
 Known preferences: {known_prefs}
-No preference for: {no_prefs}
-Still missing: {missing}
-User said: "{last_user_message}"
+No preference fields: {no_prefs}
+Still missing fields: {missing}
+User last message: "{last_user_message}"
 
-If there are missing preferences (not in either known_prefs or no_prefs):
+If there are missing preferences fields:
 - Ask about ONE missing preference
 - Be friendly and conversational
 - Do not ask about already known or "no preference" items
-
-If all preferences are accounted for (either known or "no preference"):
-- Proceed with recommendation
-- Do not ask about preferences again"""
+"""
 
 MOOD_VECTOR_PROMPT = """The mood '{mood}' needs to be mapped to a 5-dimensional music feature vector:
 valence (happiness), energy, danceability, acousticness, and tempo, each as a number between 0 and 1.
