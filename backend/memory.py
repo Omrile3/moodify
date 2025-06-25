@@ -17,6 +17,7 @@ class SessionMemory:
             "history": [],
             "last_song": None,
             "last_artist": None,
+            "last_bot_response": None,
         })
         self.lock = threading.Lock()
 
@@ -44,6 +45,7 @@ class SessionMemory:
                 "history": [],
                 "last_song": None,
                 "last_artist": None,
+                "last_bot_response": None,
             }
 
     def update_last_song(self, session_id, song, artist):

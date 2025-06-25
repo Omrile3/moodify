@@ -37,7 +37,7 @@ window.sendMessage = function () {
 
   const preferences = {
     session_id: sessionId,
-    artist_or_song: message
+    message: message
   };
 
   showTypingIndicator();
@@ -65,11 +65,15 @@ window.sendMessage = function () {
 };
 
 window.onload = () => {
+  console.log("Moodify Chatbot loaded");
   document.getElementById("chat-box").innerHTML = "";
+  const prefernce = {
+    session_id: sessionId
+  }
   fetch(`${backendUrl}/recommend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, artist_or_song: "hi" })
+    body: JSON.stringify(prefernce)
   })
     .then(res => res.json())
     .then(data => {
@@ -105,6 +109,7 @@ function appendUserMessage(msg, isButton) {
 }
 
 function appendBotMessage(msgOrObj) {
+  console.log("Appending bot message:", msgOrObj);
   const chatBox = document.getElementById("chat-box");
   let msg = msgOrObj;
   let spotifyUrl = null;
@@ -217,10 +222,12 @@ function updatePreferencesPanel() {
     .then(res => res.json())
     .then(data => {
       // Defensive defaults
-      const genre = data.genre ? capitalize(data.genre) : (data.no_pref_genre ? '—' : '—');
-      const mood = data.mood ? capitalize(data.mood) : (data.no_pref_mood ? '—' : '—');
-      const tempo = data.tempo ? capitalize(data.tempo) : (data.no_pref_tempo ? '—' : '—');
-      const artist = data.artist_or_song ? capitalize(data.artist_or_song) : (data.no_pref_artist_or_song ? '—' : '—');
+      console.log("Session data:", data);
+      no_pref_text = capitalize("no preference");
+      const genre = data.genre ? capitalize(data.genre) : (data.no_pref_genre ? no_pref_text : '—');
+      const mood = data.mood ? capitalize(data.mood) : (data.no_pref_mood ? no_pref_text : '—');
+      const tempo = data.tempo ? capitalize(data.tempo) : (data.no_pref_tempo ? no_pref_text : '—');
+      const artist = data.artist_or_song ? capitalize(data.artist_or_song) : (data.no_pref_artist_or_song ? no_pref_text : '—');
 
       document.getElementById("pref-genre").innerText = genre;
       document.getElementById("pref-mood").innerText = mood;

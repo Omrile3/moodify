@@ -1,203 +1,213 @@
 import pandas as pd
 import numpy as np
 import random
-from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MinMaxScaler
+
 from utils import (
-    convert_tempo_to_bpm,
     bpm_to_tempo_category,
-    fuzzy_match_artist_song,
-    generate_chat_response,
-    extract_preferences_from_message,
-    split_mode_category,
     build_recommendation_key,
     precompute_recommendation_map,
-    get_mood_vector,  # Hybrid mood vector logic
+    get_mood_vector
 )
+from constants import (
+    DATA_PATH,
+    AUDIO_FEATURES
+)
+from scoring import calculate_weighted_score
+from filters import apply_all_filters
+from constants import PREFERENCE_FIELDS
+from log_utils import log_dict_info, log_dict_warning
 
-DATA_PATH = "data/songs.csv"
-df = pd.read_csv(DATA_PATH)
+def load_and_process_data() -> tuple[pd.DataFrame, dict]:
+    """
+    Load and preprocess the song dataset.
+    
+    Returns:
+        Tuple of (processed DataFrame, recommendation map)
+    """
+    log_dict_info("Loading song dataset", path=DATA_PATH)
+    df = pd.read_csv(DATA_PATH)
 
-df["tempo_raw"] = pd.to_numeric(df["tempo"], errors="coerce")
+    # Convert tempo to numeric and handle missing values
+    log_dict_info("Processing tempo data", total_rows=len(df))
+    df["tempo_raw"] = pd.to_numeric(df["tempo"], errors="coerce")
 
-features = ['valence', 'energy', 'danceability', 'acousticness', 'tempo']
-df = df.dropna(subset=features)
-df[features] = df[features].apply(pd.to_numeric, errors='coerce')
-df = df.dropna(subset=features)
-scaler = MinMaxScaler()
-df[features] = scaler.fit_transform(df[features])
+    # Preprocess audio features
+    log_dict_info("Processing audio features", 
+                 features=AUDIO_FEATURES,
+                 initial_rows=len(df))
+    df = df.dropna(subset=AUDIO_FEATURES)
+    df[AUDIO_FEATURES] = df[AUDIO_FEATURES].apply(pd.to_numeric, errors='coerce')
+    df = df.dropna(subset=AUDIO_FEATURES)
 
-recommendation_map = precompute_recommendation_map(df)
+    # Scale audio features
+    log_dict_info("Scaling audio features", 
+                 features=AUDIO_FEATURES,
+                 scaler="MinMaxScaler")
+    scaler = MinMaxScaler()
+    df[AUDIO_FEATURES] = scaler.fit_transform(df[AUDIO_FEATURES])
 
-SAD_MOODS = {"sad", "melancholy", "down", "emotional", "blue", "heartbreak", "gloomy"}
-HAPPY_MOODS = {"happy", "joy", "energetic", "upbeat", "party", "celebrate", "excited"}
-UPBEAT_WORDS = {"upbeat", "party", "dance", "energetic", "celebrate", "hyped", "intense"}
-SLOW_WORDS = {"slow", "ballad", "chill", "calm"}
+    # Precompute recommendation map
+    log_dict_info("Building recommendation map", 
+                 total_songs=len(df),
+                 unique_genres=len(df['playlist_genre'].unique()))
+    recommendation_map = precompute_recommendation_map(df)
+    
+    log_dict_info("Data preprocessing complete",
+                 final_rows=len(df),
+                 feature_stats={
+                     feature: {
+                         "mean": float(df[feature].mean()),
+                         "std": float(df[feature].std())
+                     } for feature in AUDIO_FEATURES
+                 })
+    return df, recommendation_map
 
-def normalize(val):
-    if isinstance(val, str):
-        return val.strip().lower()
-    return val
+# Load processed data
+df, recommendation_map = load_and_process_data()
 
-def weighted_score(row, prefs):
-    mood = normalize(row.get('mode_category', '')) if 'mode_category' in row else ''
-    genre = normalize(row.get('playlist_genre', '')) if 'playlist_genre' in row else ''
-    tempo = normalize(row.get('tempo_category', '')) if 'tempo_category' in row else ''
-    artist = normalize(row.get('track_artist', '')) if 'track_artist' in row else ''
-    track_name = normalize(row.get('track_name', '')) if 'track_name' in row else ''
-    if not mood and 'mood' in row:
-        mood = normalize(row.get('mood', ''))
-
-    score = 0
-    if prefs.get("genre"):
-        pgenre = normalize(prefs["genre"])
-        if pgenre and pgenre in genre:
-            score += 8
-    if prefs.get("mood"):
-        pmood = normalize(prefs["mood"])
-        if pmood and pmood in mood:
-            score += 8
-        elif pmood in SAD_MOODS and any(x in mood for x in SAD_MOODS):
-            score += 8
-        elif pmood in SAD_MOODS and any(x in mood for x in HAPPY_MOODS):
-            score -= 10
-        elif pmood and pmood in mood:
-            score += 3
-    if prefs.get("tempo"):
-        ptempo = normalize(prefs["tempo"])
-        if ptempo and ptempo in tempo:
-            score += 8
-        elif ptempo in SLOW_WORDS and any(x in tempo for x in SLOW_WORDS):
-            score += 8
-        elif ptempo in SLOW_WORDS and any(x in tempo for x in UPBEAT_WORDS):
-            score -= 5
-        elif ptempo and ptempo in tempo:
-            score += 2
-    if prefs.get("artist_or_song"):
-        query = normalize(prefs["artist_or_song"])
-        if query and (query in artist or query in track_name):
-            score += 2
-    pop_val = row.get('track_popularity', row.get('popularity', None))
-    if pop_val is not None and not pd.isnull(pop_val):
-        try:
-            score += float(pop_val) / 100.0
-        except Exception:
-            pass
-    if prefs.get("mood") and normalize(prefs["mood"]) in SAD_MOODS:
-        if any(w in mood for w in HAPPY_MOODS | UPBEAT_WORDS):
-            score -= 7
-    if prefs.get("tempo") and normalize(prefs["tempo"]) in SLOW_WORDS:
-        if any(w in tempo for w in UPBEAT_WORDS):
-            score -= 3
-    return score
 
 def recommend_engine(preferences: dict, api_key: str):
-    # Defensive: Only recommend if all four keys present (filled or None/"no preference")
-    must_have = ["genre", "mood", "tempo", "artist_or_song"]
-    # Only proceed if all fields are filled (string) or explicitly None (no preference)
-    for k in must_have:
-        # If the session logic is correct, each should exist (even as None)
-        if k not in preferences or (preferences[k] is None and not preferences.get(f"no_pref_{k}", False)):
+    """
+    Get song recommendations based on user preferences.
+    
+    Args:
+        preferences: Dictionary of user preferences
+        api_key: OpenAI API key for mood vector generation
+    
+    Returns:
+        Dictionary containing recommended song information
+    """
+    # Validate preferences
+    for field in PREFERENCE_FIELDS:
+        if not preferences.get(field) and not preferences.get(f"no_pref_{field}", False):
+            log_dict_warning("Missing required preference", 
+                           field=field,
+                           preferences=preferences)
             return None
-
-    def apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=None):
-        local_df = df.copy()
-        mood_str = preferences.get("mood")
-        mood_vec = None
-        if mood_str:
-            mood_vec = get_mood_vector(mood_str, api_key)
-        if preferences.get("artist_or_song"):
-            local_df = fuzzy_match_artist_song(local_df, preferences["artist_or_song"])
-        if filter_genre and preferences.get("genre"):
-            local_df = local_df[local_df['playlist_genre'].str.lower() == preferences["genre"].lower()]
-        if filter_tempo and preferences.get("tempo"):
-            bpm_range = convert_tempo_to_bpm(preferences["tempo"])
-            local_df = local_df[(local_df['tempo_raw'] >= bpm_range[0]) & (local_df['tempo_raw'] <= bpm_range[1])]
-        if mood_vec is not None and not local_df.empty:
-            similarities = cosine_similarity(np.array(mood_vec).reshape(1, -1), local_df[features].values).flatten()
-            local_df["similarity"] = similarities
-            local_df = local_df.sort_values(by="similarity", ascending=False)
-        if exclude_artist:
-            local_df = local_df[local_df["track_artist"].str.lower() != exclude_artist.lower()]
-        return local_df
-
-    def exclude_history(df, history):
-        if not history:
-            return df
-        return df[
-            ~df.apply(lambda row: (row["track_name"], row["track_artist"]) in history, axis=1)
-        ]
-
-    exclude_artist = None
-    if preferences.get("artist_or_song"):
-        lowered = preferences["artist_or_song"].lower()
-        similarity_request_keywords = [
-            "similar to", "like", "vibe like", "in the style of",
-            "another artist like", "by a similar artist", "reminiscent of", "same vibe as", "any artist"
-        ]
-        if any(kw in lowered for kw in similarity_request_keywords):
-            for artist in df['track_artist'].dropna().unique():
-                if artist.lower() in lowered:
-                    exclude_artist = artist
-                    preferences["artist_or_song"] = artist
-                    break
-
-    filtered = apply_filters(preferences, filter_tempo=True, filter_genre=True, exclude_artist=exclude_artist)
+            
+    # Get mood vector if mood preference exists
+    mood_vec = None
+    if preferences.get("mood"):
+        log_dict_info("Getting mood vector", 
+                     mood=preferences['mood'],
+                     session_id=preferences.get('session_id'))
+        mood_vec = get_mood_vector(preferences["mood"], api_key)
+        
+    # Apply filters with increasing flexibility
     history = preferences.get("history", [])
-    filtered = exclude_history(filtered, history)
+    filtered, exclude_artist = apply_all_filters(
+        df, preferences, AUDIO_FEATURES, mood_vec, strict=True
+    )
+    
     if filtered.empty:
-        filtered = apply_filters(preferences, filter_tempo=False, filter_genre=True, exclude_artist=exclude_artist)
-        filtered = exclude_history(filtered, history)
-    if filtered.empty:
-        filtered = apply_filters(preferences, filter_tempo=False, filter_genre=False, exclude_artist=exclude_artist)
-        filtered = exclude_history(filtered, history)
-
+        log_dict_info("No strict matches, relaxing filters",
+                     preferences=preferences,
+                     history_length=len(history),
+                     mood_vector_present=mood_vec is not None)
+        filtered, exclude_artist = apply_all_filters(
+            df, preferences, AUDIO_FEATURES, mood_vec, strict=False
+        )
+        
     top = None
-
     if not filtered.empty:
+        # Calculate scores for filtered songs
         filtered = filtered.copy()
-        filtered["weighted_score"] = filtered.apply(lambda row: weighted_score(row, preferences), axis=1)
+        filtered["weighted_score"] = filtered.apply(
+            lambda row: calculate_weighted_score(row, preferences),
+            axis=1
+        )
         filtered = filtered.sort_values(by="weighted_score", ascending=False)
+        
+        # Try to find first non-repeated song
         for _, row in filtered.iterrows():
             if (row["track_name"], row["track_artist"]) not in history:
                 top = row
                 history.append((row["track_name"], row["track_artist"]))
+                log_dict_info("Found non-repeated song", 
+                            song=row['track_name'],
+                            artist=row['track_artist'],
+                            score=row['weighted_score'])
                 break
+                
+        # If all are repeats, take the top one
         if top is None and not filtered.empty:
             top = filtered.iloc[0]
             history.append((top["track_name"], top["track_artist"]))
-    else:
+            log_dict_info("Using repeated song",
+                       song=top['track_name'],
+                       artist=top['track_artist'],
+                       weighted_score=float(top['weighted_score']),
+                       reason="all_songs_repeated")
+    
+    # Use fallback recommendation if no matches found
+    if top is None:
         genre = preferences.get("genre", "rock")
         tempo = preferences.get("tempo", "medium")
         mood = preferences.get("mood", "calm")
         energy = "energetic"
+        
+        log_dict_info("Using fallback recommendation",
+                    fallback_preferences={
+                        "genre": genre,
+                        "tempo": tempo,
+                        "mood": mood,
+                        "energy": energy
+                    },
+                    history_length=len(history))
+        
         key = build_recommendation_key(genre, mood, energy, tempo)
         fallback_list = recommendation_map.get(key, [])
-        non_repeats = [song for song in fallback_list if (song["track_name"], song["track_artist"]) not in history]
+        
+        non_repeats = [
+            song for song in fallback_list 
+            if (song["track_name"], song["track_artist"]) not in history
+        ]
+        
         if non_repeats:
             top = random.choice(non_repeats)
             history.append((top["track_name"], top["track_artist"]))
+            log_dict_info("Found non-repeated fallback song",
+                       song=top["track_name"],
+                       artist=top["track_artist"],
+                       fallback_key=key,
+                       available_songs=len(non_repeats))
         elif fallback_list:
             top = random.choice(fallback_list)
             history.append((top["track_name"], top["track_artist"]))
+            log_dict_info("Using repeated fallback song",
+                       song=top["track_name"],
+                       artist=top["track_artist"],
+                       fallback_key=key,
+                       history_length=len(history))
         else:
+            log_dict_warning("No recommendations found",
+                          preferences=preferences,
+                          fallback_key=key,
+                          history_length=len(history))
             return None
 
+    # Update history and prepare response
     preferences["history"] = history
-
+    
+    # Get tempo category and Spotify URL
     tempo_category = bpm_to_tempo_category(top.get("tempo_raw", 100))
-    track_id = top.get("track_id")
+    track_id = top.get("track_id", "").strip()
     spotify_url = None
-    if (
-        track_id 
-        and isinstance(track_id, str)
-        and track_id.lower() != "none"
-        and track_id.strip() != ""
-        and len(track_id.strip()) == 22
-        and track_id.strip().isalnum()
+    
+    if (track_id and 
+        isinstance(track_id, str) and 
+        track_id.lower() != "none" and 
+        len(track_id) == 22 and 
+        track_id.isalnum()
     ):
-        spotify_url = f"https://open.spotify.com/track/{track_id.strip()}"
+        spotify_url = f"https://open.spotify.com/track/{track_id}"
+        log_dict_info("Generated Spotify URL",
+                    track_id=track_id,
+                    spotify_url=spotify_url,
+                    song=top.get("track_name"))
 
+    # Build response
     response = {
         "song": top.get("track_name", "Unknown"),
         "artist": top.get("track_artist", "Unknown"),
@@ -207,10 +217,22 @@ def recommend_engine(preferences: dict, api_key: str):
         "spotify_url": spotify_url
     }
 
+    # Add artist not found flag if needed
     if preferences.get("artist_or_song"):
         requested = preferences["artist_or_song"].lower()
         if top.get("track_artist", "").lower() != requested:
             response["artist_not_found"] = True
             response["requested_artist"] = requested
+            log_dict_info("Artist not found, suggesting alternative",
+                       requested_artist=requested,
+                       suggested_artist=top.get("track_artist"),
+                       song=top.get("track_name"))
 
+    log_dict_info("Final recommendation",
+                song=response['song'],
+                artist=response['artist'],
+                genre=response['genre'],
+                mood=response['mood'],
+                tempo=response['tempo'],
+                has_spotify_url=bool(spotify_url))
     return response
