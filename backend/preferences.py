@@ -18,7 +18,7 @@ def extract_user_preferences(message: str, api_key: str) -> Dict[str, Optional[s
     """
     # First extract raw preferences from the message
     gpt_extracted_preferences = extract_preferences_raw(message, api_key)
-    log_dict_info("gpt extracted prefernce from message", gpt_extracted_preferences)
+    log_dict_info("gpt extracted preference from message", preferences=gpt_extracted_preferences)
     # Then process them with the original message context for "no preference" detection
     return process_preferences(gpt_extracted_preferences, message)
 

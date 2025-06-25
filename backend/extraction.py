@@ -65,10 +65,10 @@ def extract_preferences_raw(message: str, api_key: str) -> dict:
         )
         response.raise_for_status()
         text = response.json()["choices"][0]["message"]["content"].strip()
-        log_dict_info(f"GPT extract prefernce response: {text}")
+        log_dict_info("GPT extract preference response", response=text)
         # Handle special responses
         if text in ["__NOT_ENGLISH__", "__NOT_MUSIC__"]:
-            log_dict_info(f"Special response detected: {text}")
+            log_dict_info("Special response detected", response=text)
             return {
                 "genre": None,
                 "mood": None,
@@ -89,7 +89,7 @@ def extract_preferences_raw(message: str, api_key: str) -> dict:
         return json.loads(match.group(0))
 
     except Exception as e:
-        log_dict_error(f"Error extracting preferences: {e}")
+        log_dict_error("Error extracting preferences", error=str(e))
         return {
             "genre": None,
             "mood": None,

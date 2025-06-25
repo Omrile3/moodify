@@ -27,11 +27,11 @@ def fuzzy_match_word(word, options, cutoff=0.75):
 def fuzzy_match_artist_song(df, query: str):
     """Find matching artists or songs in the dataset."""
     if not isinstance(query, str):
-        log_dict_warning(f"Invalid query type: {type(query)}. Expected a string.")
+        log_dict_warning("Invalid query type", query_type=str(type(query)))
         return df.head(5)
     
     query = query.lower()
-    log_dict_info(f"Fuzzy matching for query: {query}")
+    log_dict_info("Fuzzy matching for query", query=query)
     
     df['track_artist'] = df['track_artist'].fillna("").astype(str).str.lower()
     df['track_name'] = df['track_name'].fillna("").astype(str).str.lower()
@@ -89,7 +89,7 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
             message += f' 🎵 <a href="{spotify_url}" target="_blank">Listen on Spotify</a>'
         return message
     except Exception as e:
-        log_dict_error("OpenAI Chat Error", e)
+        log_dict_error("OpenAI Chat Error", error=str(e))
         fallback = f"🎵 Here's a great track: '{format_vars['song']}' by {format_vars['artist']}."
         if spotify_url and isinstance(spotify_url, str) and "open.spotify.com/track/" in spotify_url and len(spotify_url) > 35:
             fallback += f' <a href="{spotify_url}" target="_blank">Listen</a>'
@@ -134,7 +134,7 @@ def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        log_dict_error("OpenAI next_ai_message Error", e)
+        log_dict_error("OpenAI next_ai_message Error", error=str(e))
         return "What kind of music do you feel like today?"
 
 def get_mood_vector(mood: str, api_key: str) -> list:
@@ -173,7 +173,7 @@ def get_mood_vector(mood: str, api_key: str) -> list:
             if len(arr) == 5 and all(0 <= x <= 1 for x in arr):
                 return arr
     except Exception as e:
-        log_dict_error("OpenAI Mood Vector Error", e)
+        log_dict_error("OpenAI Mood Vector Error", error=str(e))
     
     return [0.5, 0.5, 0.5, 0.5, 0.5]  # Neutral fallback
 
