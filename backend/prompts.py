@@ -31,14 +31,11 @@ Rules:
   "artist_or_song": null
 }}
 - If a word could belong to multiple categories (e.g., “calm” might be mood or tempo), and context is missing, assign it to the most likely default based on common usage (e.g., mood before tempo).
+- the user input is the answer to the last bot response.you need to understand from the context which preference feild the user is referring to. 
 
 The user input is:
 "{user_message}"
 """
-
-
-
-
 
 CHAT_RESPONSE_PROMPT = """You are Moodify, a friendly and concise music recommendation assistant.
 The user wants a song that matches these preferences:
@@ -103,7 +100,7 @@ SYSTEM_ROLES = {
 GPT_SETTINGS = {
     'preference_extraction': {
         'temperature': 0.2,
-        'max_tokens': 500
+        'max_tokens': 700
     },
     'chat_response': {
         'temperature': 0.6,
