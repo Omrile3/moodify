@@ -128,7 +128,12 @@ def process_preferences(
             continue
 
         val = val.lower().strip()
-        
+
+        if val in NO_PREF_WORDS:
+            # If the value is a "no preference" word, set to None
+            result[field] = None
+            continue
+
         # Handle field-specific validation
         if field == "mood":
             # Check vague mood mappings first

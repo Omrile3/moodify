@@ -24,7 +24,7 @@ MOODS = {
 }
 
 NO_PREF_WORDS = {
-    "no", "none", "nah", "not really", "nothing", "any", 
+    "no", "nah", "not really", "nothing", "any", 
     "anything", "whatever", "doesn't matter", "does not matter", 
     "no preference", "up to you", "anything is fine", "i don't care", 
     "i don't mind", "doesn't matter to me", "no specific preference"
