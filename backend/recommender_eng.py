@@ -80,10 +80,7 @@ def recommend_engine(preferences: dict, api_key: str):
     """
     # Validate preferences
     for field in PREFERENCE_FIELDS:
-        if field not in preferences or (
-            preferences[field] is None and 
-            not preferences.get(f"no_pref_{field}", False)
-        ):
+        if not preferences.get(field) and not preferences.get(f"no_pref_{field}", False):
             log_dict_warning("Missing required preference", 
                            field=field,
                            preferences=preferences)

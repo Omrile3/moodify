@@ -38,7 +38,7 @@ def update_session_preferences(session: dict, extracted: dict) -> None:
         value = extracted.get(field)
         if value is None:
             continue
-        session[field] = value
+        session[field] = None if value == NO_PREF else value
         session[f"no_pref_{field}"] = value == NO_PREF
 
 def _is_preference_set(session: dict, field: str) -> bool:
