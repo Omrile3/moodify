@@ -8,6 +8,7 @@ from prompts import (
     CHAT_RESPONSE_PROMPT,
     NEXT_MESSAGE_PROMPT,
     NEXT_MESSAGE_USER_PROMPT,
+    NEXT_MESSAGE_NOT_EXTRACTED_USER_PROMPT,
     MOOD_VECTOR_PROMPT,
     SYSTEM_ROLES,
     GPT_SETTINGS
@@ -136,6 +137,49 @@ def next_ai_message(session: dict, last_user_message: str, api_key: str) -> str:
     except Exception as e:
         log_dict_error("OpenAI next_ai_message Error", error=str(e))
         return "What kind of music do you feel like today?"
+
+def next_ai_message_not_extracted(session: dict,last_user_message: str, api_key: str) -> str:
+    """Generate next AI message when no preferences are extracted."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    all_keys = ["genre", "mood", "tempo", "artist_or_song"]
+    known_prefs = {k: session.get(k) for k in all_keys if session.get(k) is not None}
+    missing = [k for k in all_keys if session.get(k) is None]
+    no_prefs = [k for k in all_keys if session.get(f"no_pref_{k}", False)]
+
+    format_vars = {
+        'known_prefs': known_prefs,
+        'no_prefs': no_prefs,
+        'missing': missing,
+        'last_user_message': last_user_message
+    }
+
+    user_prompt = NEXT_MESSAGE_NOT_EXTRACTED_USER_PROMPT.format(**format_vars)
+
+    body = {
+        "model": OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": NEXT_MESSAGE_PROMPT},
+            {"role": "user", "content": user_prompt}
+        ],
+        **GPT_SETTINGS['next_message']
+    }
+
+    try:
+        response = requests.post(
+            OPENAI_API_URL,
+            headers=headers,
+            json=body
+        )
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        log_dict_error("OpenAI next_ai_message Error", error=str(e))
+        return "What kind of music do you feel like today?"
+
 
 def get_mood_vector(mood: str, api_key: str) -> list:
     """Get mood vector for a given mood."""

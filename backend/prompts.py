@@ -20,12 +20,14 @@ Rules:
 - If a preference is unclear or not present, set that field to null.
 - For "artist_or_song", extract the exact name of an artist or song if mentioned; otherwise, set to null or "no preference" as appropriate.
 - If the input is not in English, or contains no extractable preferences for any field, return this:
+
 {{
   "genre": null,
   "mood": null,
   "tempo": null,
   "artist_or_song": null
 }}
+- If a word could belong to multiple categories (e.g., “calm” might be mood or tempo), and context is missing, assign it to the most likely default based on common usage (e.g., mood before tempo).
 
 The user input is:
 "{user_message}"
@@ -67,6 +69,22 @@ If there are missing preferences fields:
 - Be friendly and conversational
 - Do not ask about already known or "no preference" items
 """
+
+
+NEXT_MESSAGE_NOT_EXTRACTED_USER_PROMPT = """Conversation state:
+Known preferences: {known_prefs}
+No preference fields: {no_prefs}
+Still missing fields: {missing}
+User last message: "{last_user_message}"
+
+You did not extract any preferences from the user's last message.
+Explain that you did not understand their preferences and ask them to clarify.
+If there are missing preferences fields:
+- Ask about ONE missing preference
+- Be friendly and conversational
+- Do not ask about already known or "no preference" items
+"""
+
 
 MOOD_VECTOR_PROMPT = """The mood '{mood}' needs to be mapped to a 5-dimensional music feature vector:
 valence (happiness), energy, danceability, acousticness, and tempo, each as a number between 0 and 1.

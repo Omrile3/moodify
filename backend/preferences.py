@@ -81,3 +81,16 @@ def get_missing_preferences(session: dict) -> List[str]:
         field for field in PREFERENCE_FIELDS 
         if not _is_preference_set(session, field)
     ]
+
+
+def all_extracted_are_none(extracted: Dict[str, Optional[str]]) -> bool:
+    """
+    Check if all extracted preferences are None.
+    
+    Args:
+        extracted: Dictionary of extracted preferences
+    
+    Returns:
+        True if all values in the dictionary are None
+    """
+    return all(value is None for value in extracted.values())

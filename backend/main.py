@@ -15,11 +15,12 @@ from preferences import (
     extract_user_preferences,
     update_session_preferences,
     has_all_preferences,
-    get_missing_preferences
+    all_extracted_are_none
 )
 from utils import (
     generate_chat_response,
-    next_ai_message
+    next_ai_message,
+    next_ai_message_not_extracted
 )
 from constants import (
     PREFERENCE_FIELDS,
@@ -172,6 +173,12 @@ def handle_user_message(session_id: str, message: str) -> dict:
     extracted = extract_user_preferences(message, OPENAI_API_KEY)
     logger.info(f"Extracted preferences: {extracted}")
     
+    if all_extracted_are_none(extracted):
+        logger.info(f"No preferences extracted from message: {message}")
+        ai_message = next_ai_message_not_extracted(session, message, OPENAI_API_KEY)
+        memory.update_session(session_id, "followup_count", session.get("followup_count", 0) + 1)
+        return {"response": Messages.wrap_green(ai_message)}
+
     # Update session with new preferences
     update_session_preferences(session, extracted)
     logger.debug(f"Updated session preferences: {session}")
