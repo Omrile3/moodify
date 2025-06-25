@@ -18,9 +18,11 @@ def extract_user_preferences(message: str, api_key: str) -> Dict[str, Optional[s
     """
     # First extract raw preferences from the message
     gpt_extracted_preferences = extract_preferences_raw(message, api_key)
-    log_dict_info("gpt extracted preference from message", preferences=gpt_extracted_preferences)
+    log_dict_info("gpt extracted preference converted to json format", preferences=gpt_extracted_preferences)
     # Then process them with the original message context for "no preference" detection
-    return process_preferences(gpt_extracted_preferences, message)
+    validated_preferences = process_preferences(gpt_extracted_preferences)
+    log_dict_info("validated preferences after processing", preferences=validated_preferences)
+    return validated_preferences
 
 def update_session_preferences(session: dict, extracted: dict) -> None:
     """

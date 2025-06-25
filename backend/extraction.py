@@ -21,6 +21,14 @@ from constants import (
 )
 from utils import fuzzy_match_word
 
+empty_dict = {
+    "genre": None,
+    "mood": None,
+    "tempo": None,
+    "artist_or_song": None
+}
+
+
 def extract_preferences_raw(message: str, api_key: str) -> dict:
     """
     Make raw GPT call to extract preferences from message.
@@ -65,17 +73,11 @@ def extract_preferences_raw(message: str, api_key: str) -> dict:
         )
         response.raise_for_status()
         text = response.json()["choices"][0]["message"]["content"].strip()
-        log_dict_info("GPT extract preference response", response=text)
+        log_dict_info("GPT extract preference response in text format", response=text)
         # Handle special responses
         if text in ["__NOT_ENGLISH__", "__NOT_MUSIC__"]:
             log_dict_info("Special response detected", response=text)
-            return {
-                "genre": None,
-                "mood": None,
-                "tempo": None,
-                "artist_or_song": None,
-                f"_{text.lower().strip('_')}": True
-            }
+            return empty_dict
 
         # Extract JSON from response
         if text.startswith("```"):
@@ -83,24 +85,17 @@ def extract_preferences_raw(message: str, api_key: str) -> dict:
             text = text[text.find("{"):]
         match = re.search(r"\{[\s\S]*\}", text)
         if not match:
-            log_dict_error("No JSON object found in response")
-            raise ValueError("No JSON object found in response")
+            log_dict_error("No JSON object found in response", response=text)
+            return empty_dict
         
         return json.loads(match.group(0))
 
     except Exception as e:
         log_dict_error("Error extracting preferences", error=str(e))
-        return {
-            "genre": None,
-            "mood": None,
-            "tempo": None,
-            "artist_or_song": None,
-            "_error": str(e)
-        }
+        return empty_dict
 
 def process_preferences(
-    extracted: dict,
-    message: Optional[str] = None
+    extracted: dict
 ) -> Dict[str, Optional[str]]:
     """
     Process and validate extracted preferences.
@@ -112,30 +107,23 @@ def process_preferences(
     Returns:
         Processed and validated preferences
     """
+    if extracted == empty_dict:
+        return empty_dict
+
     result = {}
     
-    # Handle special cases
-    if any(extracted.get(k) for k in ["_not_english", "_not_music", "_error"]):
-        log_dict_info("Special case detected in extracted preferences")
-        return {
-            "genre": None,
-            "mood": None,
-            "tempo": None,
-            "artist_or_song": None,
-            **{k: v for k, v in extracted.items() if k.startswith("_")}
-        }
 
-    # Check for "no preference" in original message using fuzzy matching
-    has_no_pref = False
-    if message:
-        msg_lower = message.lower()
-        has_no_pref = fuzzy_match_word(msg_lower, NO_PREF_WORDS) is not None
+    # # Check for "no preference" in original message using fuzzy matching
+    # has_no_pref = False
+    # if message:
+    #     msg_lower = message.lower()
+    #     has_no_pref = fuzzy_match_word(msg_lower, NO_PREF_WORDS) is not None
 
     # Process each preference field
     for field in ["genre", "mood", "tempo", "artist_or_song"]:
         val = extracted.get(field)
-        
-        if not val or has_no_pref:
+
+        if not val:
             result[field] = None
             continue
 
@@ -144,7 +132,7 @@ def process_preferences(
         # Handle field-specific validation
         if field == "mood":
             # Check vague mood mappings first
-            if val in VAGUE_TO_MOOD:
+            if val in VAGUE_TO_MOOD.keys():
                 val = VAGUE_TO_MOOD[val]
             # Then check against valid moods
             if val in MOODS:
@@ -158,7 +146,9 @@ def process_preferences(
         elif field == "tempo":
             result[field] = val if val in ["slow", "medium", "fast"] else None
             
-        else:  # artist_or_song
+        elif field == "artist_or_song":
             result[field] = val
+        else:
+            log_dict_error("Unknown preference field", field=field, value=val)
 
     return result
