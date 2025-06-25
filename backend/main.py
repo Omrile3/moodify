@@ -18,7 +18,7 @@ from preferences import (
     all_extracted_are_none
 )
 from utils import (
-    generate_chat_response,
+    generate_chat_recommendation_response,
     next_ai_message,
     next_ai_message_not_extracted
 )
@@ -126,7 +126,7 @@ def handle_song_recommendation(session_id: str, song: dict) -> dict:
     # Update session with new song
     logger.info(f"Recommending song: {song.get('song')} by {song.get('artist')}")
     memory.update_last_song(session_id, song['song'], song['artist'])
-    gpt_message = generate_chat_response(song, memory.get_session(session_id), OPENAI_API_KEY)
+    gpt_message = generate_chat_recommendation_response(song, memory.get_session(session_id), OPENAI_API_KEY)
     response = f"{Messages.wrap_green(gpt_message)}<br>{Messages.Recommendations.FEEDBACK_BUTTONS}"
     memory.update_session(session_id, "awaiting_feedback", True)
     memory.update_session(session_id, "last_bot_response", response)

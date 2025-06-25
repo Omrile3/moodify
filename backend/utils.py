@@ -5,7 +5,7 @@ import re
 import requests
 import pandas as pd
 from prompts import (
-    CHAT_RESPONSE_PROMPT,
+    CHAT_RECOMMENDATION_RESPONSE_PROMPT,
     NEXT_MESSAGE_PROMPT,
     NEXT_MESSAGE_USER_PROMPT,
     NEXT_MESSAGE_NOT_EXTRACTED_USER_PROMPT,
@@ -47,7 +47,7 @@ def fuzzy_match_artist_song(df, query: str):
     else:
         return df.nlargest(5, 'popularity') if 'popularity' in df.columns else df.head(5)
 
-def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, custom_prompt: str = None) -> str:
+def generate_chat_recommendation_response(song_dict: dict, preferences: dict, api_key: str) -> str:
     """Generate a chat response for a song recommendation."""
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -65,7 +65,7 @@ def generate_chat_response(song_dict: dict, preferences: dict, api_key: str, cus
         'song_tempo': song_dict.get('tempo', 'Unknown')
     }
 
-    prompt = custom_prompt or CHAT_RESPONSE_PROMPT.format(**format_vars)
+    prompt = CHAT_RECOMMENDATION_RESPONSE_PROMPT.format(**format_vars)
     spotify_url = song_dict.get('spotify_url')
 
     body = {
