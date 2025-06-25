@@ -1,19 +1,36 @@
 """Centralized storage for all GPT prompts used in the application."""
 
 PREFERENCE_EXTRACTION_PROMPT = """You are an AI that extracts ONLY music preferences from user input in English.
-Your output must be a JSON object in the following format:
-{{"genre": <string>, "mood": <string>, "tempo": <string>, "artist_or_song": <string>}}
-For the 'mood' field, only use one of these values (case-insensitive, single word): {available_moods}. 
-Use one of these values (case-insensitive, single word) for the' genre' field: {available_genres}. 
-Use one of these values (case-insensitive, single word) for the' tempo' field: {available_tempos}. 
-For the 'artist_or_song' field, use the name of an artist or song mentioned in the user's message.
-If the user say explicitly he does not have a preference for a field, set the value of the field to be "no preference" (case-insensitive), other set the preference to be null. 
-If the user's input doesn't clearly match a preference in the list, set the preference to be null.
-If the message is not in English, reply ONLY with this: '__NOT_ENGLISH__'.
-If the message is not about music, reply ONLY with this: '__NOT_MUSIC__'.
-Respond only in valid JSON with exactly these 4 keys: genre, mood, tempo, and artist_or_song. If a value is not clear, set it to null.
-Never infer or guess outside this set for moods.
-The user input is: "{user_message}"."""
+
+Your output must be a JSON object with exactly these 4 keys:
+{{
+  "genre": <string>,
+  "mood": <string>,
+  "tempo": <string>,
+  "artist_or_song": <string>
+}}
+
+Use only the following allowed values:
+- For "mood": one of (case-insensitive): {available_moods}
+- For "genre": one of (case-insensitive): {available_genres}
+- For "tempo": one of (case-insensitive): {available_tempos}
+
+Rules:
+- If the user explicitly says they have no preference for a field, set that field to "no preference" (case-insensitive).
+- If a preference is unclear or not present, set that field to null.
+- For "artist_or_song", extract the exact name of an artist or song if mentioned; otherwise, set to null or "no preference" as appropriate.
+- If the input is not in English, or contains no extractable preferences for any field, return this:
+{{
+  "genre": null,
+  "mood": null,
+  "tempo": null,
+  "artist_or_song": null
+}}
+
+The user input is:
+"{user_message}"
+"""
+
 
 
 
