@@ -23,6 +23,8 @@ MOODS = {
     "peaceful", "chill", "smooth", "melancholic"
 }
 
+NO_PREF = "no preference"
+
 NO_PREF_WORDS = {
     "no", "nah", "not really", "nothing", "any", 
     "anything", "whatever", "doesn't matter", "does not matter", 

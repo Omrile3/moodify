@@ -1,7 +1,7 @@
 """Functions for handling user preferences and preference extraction."""
 
 from typing import Dict, Optional, List, Tuple
-from constants import PREFERENCE_FIELDS
+from constants import PREFERENCE_FIELDS, NO_PREF
 from extraction import extract_preferences_raw, process_preferences
 from log_utils import log_dict_info
 
@@ -33,13 +33,11 @@ def update_session_preferences(session: dict, extracted: dict) -> None:
         extracted: Dictionary of extracted preferences
     """
     for field in PREFERENCE_FIELDS:
-        if not _is_preference_set(session, field):
-            if extracted.get(field):
-                session[field] = extracted[field]
-                session[f"no_pref_{field}"] = False
-            # If GPT returned None for this field or marked it as "not music"
-            elif extracted.get("_not_music") or any(extracted.get(k) and extracted[k] is None for k in PREFERENCE_FIELDS):
-                session[f"no_pref_{field}"] = True
+        value = extracted.get(field)
+        if value is None:
+            continue
+        session[field] = value
+        session[f"no_pref_{field}"] = value == NO_PREF
 
 def _is_preference_set(session: dict, field: str) -> bool:
     """

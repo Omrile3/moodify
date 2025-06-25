@@ -14,6 +14,7 @@ from prompts import (
 from constants import (
     MOODS,
     GENRES,
+    NO_PREF,
     NO_PREF_WORDS,
     VAGUE_TO_MOOD,
     OPENAI_MODEL,
@@ -131,7 +132,7 @@ def process_preferences(
 
         if val in NO_PREF_WORDS:
             # If the value is a "no preference" word, set to None
-            result[field] = None
+            result[field] = NO_PREF
             continue
 
         # Handle field-specific validation
