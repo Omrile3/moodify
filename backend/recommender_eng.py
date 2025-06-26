@@ -142,10 +142,10 @@ def recommend_engine(preferences: dict, api_key: str):
     
     # Use fallback recommendation if no matches found
     if top is None:
-        genre = preferences.get("genre", random.choice(["rock", "pop", "jazz", "electronic"]))
-        tempo = preferences.get("tempo", random.choice(["slow", "medium", "fast"]))
-        mood = preferences.get("mood", random.choice(["calm", "energetic", "happy", "relaxed"]))
-        energy = random.choice(["energetic", "mellow", "intense"])
+        genre = preferences.get("genre", "rock")
+        tempo = preferences.get("tempo", "medium")
+        mood = preferences.get("mood", "calm")
+        energy = "energetic"
         
         log_dict_info("Using fallback recommendation",
                     fallback_preferences={
@@ -163,7 +163,6 @@ def recommend_engine(preferences: dict, api_key: str):
             song for song in fallback_list 
             if (song["track_name"], song["track_artist"]) not in history
         ]
-        random.shuffle(non_repeats)  # Shuffle the list to ensure varied results
         
         if non_repeats:
             top = random.choice(non_repeats)
