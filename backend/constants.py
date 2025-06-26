@@ -128,11 +128,11 @@ SIMILARITY_KEYWORDS = {
 
 # Scoring weights for recommendation engine
 SCORE_WEIGHTS = {
-    "genre_match": 8,
-    "mood_match": 8,
-    "tempo_match": 8,
-    "artist_match": 2,
-    "popularity": 1,
+    "genre_match": 10,
+    "mood_match": 10,
+    "tempo_match": 6,
+    "artist_match": 4,
+    "popularity": 2,
     "mood_mismatch": -10,
     "tempo_mismatch": -5
 }
