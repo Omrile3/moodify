@@ -8,7 +8,7 @@ OPENAI_MODEL = "gpt-4o"
 PREFERENCE_FIELDS = ["genre", "mood", "tempo", "artist_or_song"]
 
 GENRES = {
-    "pop", "rock", "classical", "jazz", "metal", "electronic", 
+    "pop", "rock", "classical", "jazz", "metal", "edm", 
     "hip hop", "rap", "r&b", "lofi", "latin", "folk", 
     "reggae", "country", "blues", "indie"
 }
@@ -85,6 +85,11 @@ VAGUE_TO_MOOD = {
     "something good": "happy",
     "good": "happy",
     "positive": "happy",
+    "great": "happy",
+    "bad": "sad",
+    "negative": "sad",
+    "something bad": "sad",
+    "something happy": "happy",
     "uplifting": "happy",
     "something fun": "happy",
     "something sad": "sad",
@@ -92,7 +97,7 @@ VAGUE_TO_MOOD = {
     "energy": "energetic",
     "energetic": "energetic",
     "calm": "calm",
-    "chill": "calm",
+    "chill": "chill",
 }
 
 # Tempo related constants
@@ -117,7 +122,7 @@ CHANGE_COMMANDS = {"change", "switch", "new"}
 SAD_MOODS = {"sad", "melancholy", "down", "emotional", "blue", "heartbreak", "gloomy"}
 HAPPY_MOODS = {"happy", "joy", "energetic", "upbeat", "party", "celebrate", "excited"}
 UPBEAT_WORDS = {"upbeat", "party", "dance", "energetic", "celebrate", "hyped", "intense"}
-SLOW_WORDS = {"slow", "ballad", "chill", "calm"}
+SLOW_WORDS = {"slow", "ballad", "chill", "calm", "relaxing", "laid-back", "mellow", "soothing", "relax"}
 
 # Similarity detection keywords
 SIMILARITY_KEYWORDS = {
@@ -130,10 +135,10 @@ SIMILARITY_KEYWORDS = {
 SCORE_WEIGHTS = {
     "genre_match": 10,
     "mood_match": 10,
-    "tempo_match": 6,
-    "artist_match": 3,
-    "popularity": 2,
-    "mood_mismatch": -10,
+    "tempo_match": 8,
+    "artist_match": 2,
+    "popularity": 1,
+    "mood_mismatch": -5,
     "tempo_mismatch": -5
 }
 
