@@ -78,7 +78,7 @@ def extract_preferences_raw(message: str, last_bot_response: Optional[str], api_
         text = response.json()["choices"][0]["message"]["content"].strip()
         log_dict_info("GPT extract preference response in text format", response=text)
         # Handle special responses
-        if text in ["__NOT_ENGLISH__", "__NOT_MUSIC__"]:
+        if text in ["__NOT_ENGLISH__", "__NOT_MUSIC__", "__NO_PREFERENCE__"]:
             log_dict_info("Special response detected", response=text)
             return empty_dict
 
@@ -132,7 +132,7 @@ def process_preferences(
 
         val = val.lower().strip()
 
-        if val in NO_PREF_WORDS:
+        if val in NO_PREF_WORDS or val == "no preference":
             # If the value is a "no preference" word, set to None
             result[field] = NO_PREF
             continue
