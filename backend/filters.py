@@ -198,22 +198,13 @@ def apply_all_filters(
             filtered, 
             preferences["artist_or_song"]
         )
-        if filtered.empty:
-            log_dict_info("No matches found with artist filter, omitting artist preference")
-            preferences["artist_or_song"] = None
     
     # Apply other filters based on strictness
     if strict:
         if preferences.get("genre"):
             filtered = apply_genre_filter(filtered, preferences["genre"])
-            if filtered.empty:
-                log_dict_info("No matches found with genre filter, omitting genre preference")
-                preferences["genre"] = None
         if preferences.get("tempo"):
             filtered = apply_tempo_filter(filtered, preferences["tempo"])
-            if filtered.empty:
-                log_dict_info("No matches found with tempo filter, omitting tempo preference")
-                preferences["tempo"] = None
     
     # Apply mood filtering if vector available
     if mood_vector is not None:
@@ -221,11 +212,6 @@ def apply_all_filters(
     
     # Always exclude history
     filtered = exclude_history(filtered, preferences.get("history", []))
-    
-    # Fallback: If no preferences are set, return random song
-    if all(value is None for value in preferences.values()):
-        log_dict_info("No preferences set, returning random song")
-        return filtered.sample(n=1), None
     
     log_dict_info("Filter pipeline complete",
                 initial_count=len(df),

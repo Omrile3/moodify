@@ -131,7 +131,7 @@ SCORE_WEIGHTS = {
     "genre_match": 10,
     "mood_match": 10,
     "tempo_match": 6,
-    "artist_match": 4,
+    "artist_match": 3,
     "popularity": 2,
     "mood_mismatch": -10,
     "tempo_mismatch": -5

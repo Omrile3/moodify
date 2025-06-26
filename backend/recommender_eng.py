@@ -164,7 +164,12 @@ def recommend_engine(preferences: dict, api_key: str):
             if (song["track_name"], song["track_artist"]) not in history
         ]
         
-        if non_repeats:
+        if all(preferences.get(field) == "no preference" for field in PREFERENCE_FIELDS):
+            top = random.choice(df.to_dict(orient="records"))
+            log_dict_info("User has no preferences, recommending random song",
+                       song=top["track_name"],
+                       artist=top["track_artist"])
+        elif non_repeats:
             top = random.choice(non_repeats)
             history.append((top["track_name"], top["track_artist"]))
             log_dict_info("Found non-repeated fallback song",
