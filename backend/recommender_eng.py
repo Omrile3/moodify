@@ -163,6 +163,7 @@ def recommend_engine(preferences: dict, api_key: str):
             song for song in fallback_list 
             if (song["track_name"], song["track_artist"]) not in history
         ]
+        random.shuffle(non_repeats)  # Shuffle the list to ensure varied results
         
         if non_repeats:
             top = random.choice(non_repeats)
