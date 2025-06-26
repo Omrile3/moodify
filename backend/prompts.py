@@ -53,7 +53,7 @@ Each preference must be either:
 Rules:
 - Only ask about ONE preference that is neither set nor marked as "no preference" (listed in missing).
 - Never ask about preferences that are either set or marked as "no preference".
-- If the user explicitly says "no preference" or uses words matching NO_PREF_WORDS, apply "no preference" ONLY to the relevant field and leave other fields unchanged.
+- If the user explicitly says "no preference" or uses words matching NO_PREF_WORDS, apply "no preference" ONLY to the relevant field and leave other fields unchanged!.
 - Once all preferences are either set or marked as "no preference", proceed to recommend.
 
 After recommendation, always ask for feedback.

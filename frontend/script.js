@@ -5,6 +5,13 @@ window.handleBotReply = function (msg) {
   appendUserMessage(msg, true);
   showTypingIndicator();
 
+  if (msg === "yes") {
+    const botReply = "Amazing! I'm glad! You can now change your preferences or start over via the 'reset' button!<br><div style='margin-top:10px;display:flex;gap:8px;flex-wrap:wrap'><button onclick=\"window.handleBotReply('change mood')\">Change Mood</button><button onclick=\"window.handleBotReply('change tempo')\">Change Tempo</button><button onclick=\"window.handleBotReply('change artist')\">Change Artist</button><button onclick=\"window.handleBotReply('change genre')\">Change Genre</button></div>";
+    hideTypingIndicator();
+    appendBotMessage(botReply);
+    return;
+  }
+
   fetch(`${backendUrl}/command`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
