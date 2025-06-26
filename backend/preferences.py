@@ -35,11 +35,17 @@ def update_session_preferences(session: dict, extracted: dict) -> None:
         extracted: Dictionary of extracted preferences
     """
     for field in PREFERENCE_FIELDS:
-        value = extracted.get(field)
-        if value is None:
-            continue
-        session[field] = None if value == NO_PREF else value
-        session[f"no_pref_{field}"] = value == NO_PREF
+    # Only update the field if it's present (not None) in extracted
+        if field in extracted and extracted[field] is not None:
+            value = extracted[field]
+            if value == NO_PREF:
+                session[field] = None
+                session[f"no_pref_{field}"] = True
+            else:
+                session[field] = value
+                session[f"no_pref_{field}"] = False
+    # Do NOT overwrite previous value if not provided in the new extraction!
+
 
 def _is_preference_set(session: dict, field: str) -> bool:
     """
