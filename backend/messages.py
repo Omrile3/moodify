@@ -21,7 +21,7 @@ class Messages:
         BUTTONS_HTML=f"""
             <br>
             <div style='margin-top:10px;display:flex;gap:8px;flex-wrap:wrap'>
-                <button onclick=\"window.handleBotReply('{LOVE_SONG_COMMAND}')\">👍 Yes, I love it!.</button>
+                <button onclick=\"window.handleBotReply('{LOVE_SONG_COMMAND}')\">👍 Yes, I love it!</button>
                 <button onclick=\"window.handleBotReply('{RECOMMAND_ANOTHER_COMMAND}')\">🔄 Recommend another</button>
                 <button onclick=\"window.handleBotReply('{CHANGE_MOOD_COMMAND}')\">Change mood</button>
                 <button onclick=\"window.handleBotReply('{CHANGE_GENRE_COMMAND}')\">Change genre</button>
