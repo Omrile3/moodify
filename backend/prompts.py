@@ -19,7 +19,7 @@ Use only the following allowed values:
 - For "tempo": one of (case-insensitive): {available_tempos}
 
 Rules:
-- If the user explicitly says they have no preference for a field, set that field to "no preference" (case-insensitive).
+- If the user explicitly says they have no preference for a field (matching NO_PREF or NO_PREF_WORDS), set that field to "no preference" (case-insensitive) and ensure other fields remain unchanged.
 - If a preference is unclear or not present, set that field to null.
 - For "artist_or_song", extract the exact name of an artist or song if mentioned; otherwise, set to null or "no preference" as appropriate.
 - If the input is not in English, or contains no extractable preferences for any field, return this:
@@ -31,7 +31,7 @@ Rules:
   "artist_or_song": null
 }}
 - If a word could belong to multiple categories (e.g., “calm” might be mood or tempo), and context is missing, assign it to the most likely default based on common usage (e.g., mood before tempo).
-- the user input is the answer to the last bot response.you need to understand from the context which preference feild the user is referring to. 
+- The user input is the answer to the last bot response. You need to understand from the context which preference field the user is referring to, and apply "no preference" only to the relevant field without altering others.
 
 The user input is:
 "{user_message}"
@@ -50,9 +50,11 @@ Each preference must be either:
 - A specific value (stored in known_prefs)
 - An explicit "no preference" (stored in no_prefs)
 
-Only ask about ONE preference that is neither set nor marked as "no preference" (listed in missing).
-Never ask about preferences that are either set or marked as "no preference".
-Once all preferences are either set or marked as "no preference", proceed to recommend.
+Rules:
+- Only ask about ONE preference that is neither set nor marked as "no preference" (listed in missing).
+- Never ask about preferences that are either set or marked as "no preference".
+- If the user explicitly says "no preference" or uses words matching NO_PREF_WORDS, apply "no preference" ONLY to the relevant field and leave other fields unchanged.
+- Once all preferences are either set or marked as "no preference", proceed to recommend.
 
 After recommendation, always ask for feedback.
 If the user's message is off-topic or not in English, gently redirect them to music preferences, and ask in English."""
