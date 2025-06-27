@@ -192,19 +192,19 @@ def apply_all_filters(
     filtered = df.copy()
     exclude_artist = None
     
-    # Apply artist filter first to check for similarity requests
-    if preferences.get("artist_or_song"):
-        filtered, exclude_artist = apply_artist_filter(
-            filtered, 
-            preferences["artist_or_song"]
-        )
-    
     # Apply other filters based on strictness
     if strict:
         if preferences.get("genre"):
             filtered = apply_genre_filter(filtered, preferences["genre"])
         if preferences.get("tempo"):
             filtered = apply_tempo_filter(filtered, preferences["tempo"])
+    
+    # Apply artist filter after other filters
+    if preferences.get("artist_or_song"):
+        filtered, exclude_artist = apply_artist_filter(
+            filtered, 
+            preferences["artist_or_song"]
+        )
     
     # Apply mood filtering if vector available
     if mood_vector is not None:
