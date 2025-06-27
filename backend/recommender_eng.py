@@ -142,48 +142,35 @@ def recommend_engine(preferences: dict, api_key: str):
     
     # Use fallback recommendation if no matches found
     if top is None:
-        genre = preferences.get("genre", "rock")
-        tempo = preferences.get("tempo", "medium")
-        mood = preferences.get("mood", "calm")
-        energy = "energetic"
+        genre = preferences.get("genre", None)
+        tempo = preferences.get("tempo", None)
+
+        if genre and genre.lower() != "no preference":
+            filtered_genre = df[df["playlist_genre"].str.lower() == genre.lower()]
+        else:
+            filtered_genre = df
+
+        if tempo and tempo.lower() != "no preference":
+            filtered_tempo = filtered_genre[filtered_genre["tempo_raw"].apply(
+                lambda t: bpm_to_tempo_category(t).lower() == tempo.lower()
+            )]
+        else:
+            filtered_tempo = filtered_genre
+
+        fallback_list = filtered_tempo.to_dict("records")
         
-        log_dict_info("Using fallback recommendation",
-                    fallback_preferences={
-                        "genre": genre,
-                        "tempo": tempo,
-                        "mood": mood,
-                        "energy": energy
-                    },
-                    history_length=len(history))
-        
-        key = build_recommendation_key(genre, mood, energy, tempo)
-        fallback_list = recommendation_map.get(key, [])
-        
-        non_repeats = [
-            song for song in fallback_list 
-            if (song["track_name"], song["track_artist"]) not in history
-        ]
-        
-        if non_repeats:
-            top = random.choice(non_repeats)
-            history.append((top["track_name"], top["track_artist"]))
-            log_dict_info("Found non-repeated fallback song",
-                       song=top["track_name"],
-                       artist=top["track_artist"],
-                       fallback_key=key,
-                       available_songs=len(non_repeats))
-        elif fallback_list:
+        if fallback_list:
             top = random.choice(fallback_list)
             history.append((top["track_name"], top["track_artist"]))
-            log_dict_info("Using repeated fallback song",
+            log_dict_info("Using fallback song",
                        song=top["track_name"],
                        artist=top["track_artist"],
-                       fallback_key=key,
+                       genre=top["playlist_genre"],
+                       tempo=bpm_to_tempo_category(top["tempo_raw"]),
                        history_length=len(history))
         else:
             log_dict_warning("No recommendations found",
                           preferences=preferences,
-                          fallback_key=key,
                           history_length=len(history))
             return None
 
