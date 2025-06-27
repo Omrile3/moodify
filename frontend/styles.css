@@ -203,7 +203,7 @@ button:hover {
 }
 
 .green-response strong {
-  color: #00ffcc;
+  color: #99ffcc;
 }
 
 #typing-indicator {
@@ -256,4 +256,3 @@ button:hover {
 .preferences-panel {
   margin: 0 12px 0 0; /* Remove top/bottom margin for true centering */
 }
-
