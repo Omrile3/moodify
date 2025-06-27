@@ -57,7 +57,7 @@ class Messages:
     @staticmethod
     def wrap_green(message: str) -> str:
         """Wraps a message in a green-colored span tag."""
-        return f"<span style='color:#6EBB88'>{message}</span>"
+        return f"<span class='green-text'>{message}</span>"
 
     @staticmethod
     def with_emoji(message: str, emoji: str) -> str:
