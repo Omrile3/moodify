@@ -157,7 +157,7 @@ def recommend_engine(preferences: dict, api_key: str):
         else:
             filtered_tempo = filtered_genre
 
-        fallback_list = filtered_tempo.to_dict("records")
+        fallback_list = filtered_tempo.sample(frac=1).to_dict("records")
         
         if fallback_list:
             top = random.choice(fallback_list)
